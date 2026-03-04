@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CJ Osborne | Debug Console</title>
+    <style>
+        :root {
+            --imgui-bg: #0f0f0f;
+            --imgui-window-bg: #1a1a1a;
+            --imgui-header: #2e4d82; /* ImGui Blue */
+            --imgui-text: #f0f0f0;
+            --imgui-accent: #4a90e2;
+            --imgui-border: #444444;
+        }
+
+        body {
+            background-color: var(--imgui-bg);
+            color: var(--imgui-text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 13px; /* Standard ImGui font feel */
+            margin: 0; padding: 20px;
+        }
+
+        .window {
+            background-color: var(--imgui-window-bg);
+            border: 1px solid var(--imgui-border);
+            margin-bottom: 25px;
+            box-shadow: 5px 5px 15px rgba(0,0,0,0.5);
+        }
+
+        .window-header {
+            background-color: var(--imgui-header);
+            padding: 4px 10px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            cursor: default;
+        }
+
+        .content { padding: 15px; }
+
+        h2 { font-size: 16px; margin: 0 0 10px 0; color: var(--imgui-accent); }
+        
+        .tree-node { margin-left: 15px; border-left: 1px solid #444; padding-left: 10px; margin-bottom: 5px; }
+        .tree-label { color: #9cdcfe; font-weight: bold; }
+
+        .media-box {
+            background: #000;
+            border: 1px solid #333;
+            width: 100%;
+            aspect-ratio: 16/9;
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #555;
+        }
+
+        .tag {
+            display: inline-block;
+            background: #333;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            margin-right: 5px;
+        }
+
+        a { color: #4a90e2; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+    <div class="window" style="max-width: 500px;">
+        <div class="window-header"><span>Main Menu</span><span>_ □ x</span></div>
+        <div class="content">
+            <p><strong>User:</strong> CJ Osborne [cite: 1]</p>
+            <p><strong>Role:</strong> Graphics / Physics / Systems Engineer [cite: 2]</p>
+            <p><strong>Status:</strong> Expected Graduation May 2026 (DigiPen) [cite: 15, 16]</p>
+            <div class="contact-links">
+                <a href="mailto:cj.l.osborne@gmail.com">Email</a> | 
+                <a href="https://www.linkedin.com/in/ci-osborne-083950301/">LinkedIn</a> [cite: 7, 8, 9]
+            </div>
+        </div>
+    </div>
+
+    <div class="window">
+        <div class="window-header"><span>Project: Specter Inspector (Physics/Systems)</span><span>_ □ x</span></div>
+        <div class="content">
+            <div class="tag">C++</div> <div class="tag">AABB</div> <div class="tag">Custom Engine</div> [cite: 56, 57, 58, 62]
+            <div class="media-box">INSERT: CLIP SHOWING DEBUG BOXES & RAYCASTS</div>
+            
+            <div class="tree-node">
+                <span class="tree-label">▼ Physics System</span>
+                <p>Developed custom AABB collision and point-line raycasting for smooth interaction[cite: 57, 58].</p>
+            </div>
+            <div class="tree-node">
+                <span class="tree-label">▼ Battery System</span>
+                <p>Engineered the core logic for the window-dragging battery mechanics[cite: 55, 56].</p>
+            </div>
+            <div class="tree-node">
+                <span class="tree-label">▼ Shaders</span>
+                <p>Custom GLSL/HLSL particle systems and feedback shaders[cite: 59, 64].</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="window">
+        <div class="window-header"><span>Project: Barton (Unreal Tooling)</span><span>_ □ x</span></div>
+        <div class="content">
+            <div class="tag">UE 5.4</div> <div class="tag">GPT-4o</div> <div class="tag">Tools</div> [cite: 48, 70]
+            <div class="media-box">INSERT: VIDEO OF GPT INTERACTION & DESIGNER FACE TOOL</div>
+            
+            <div class="tree-node">
+                <span class="tree-label">▼ GenAI Integration</span>
+                <p>Integrated ChatGPT 4o into the UE5 actor interaction system[cite: 47, 48, 70].</p>
+            </div>
+            <div class="tree-node">
+                <span class="tree-label">▼ Technical Art Tools</span>
+                <p>Created face-changing shaders and tools for artists to manage sidekick expressions[cite: 47, 49].</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="window">
+        <div class="window-header"><span>Project: TheEngine (Graphics API)</span><span>_ □ x</span></div>
+        <div class="content">
+            <div class="tag">DX11</div> <div class="tag">OpenGL</div> <div class="tag">Vulkan</div> [cite: 28, 67, 68]
+            <div class="media-box">INSERT: GRID OF JELLY TETRIS / FLUID SIMS / ANDROID BUILD</div>
+            
+            <div class="tree-node">
+                <span class="tree-label">▼ Backend Status</span>
+                <p>Running on DX11, OpenGL, and GLES. Currently implementing Vulkan and DX12[cite: 67, 68].</p>
+            </div>
+            <div class="tree-node">
+                <span class="tree-label">▼ API Transition</span>
+                <p>Refactored custom engine into a portable API for cross-project integration[cite: 62].</p>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

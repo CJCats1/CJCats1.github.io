@@ -205,9 +205,8 @@
 
                 // Lazy-load the ImGui example the first time the overlay is opened.
                 if (!iframeLoaded) {
-                    // This path assumes the cloned imgui-js repo lives next to this index.html
-                    // at: C:\Users\cjrea\Downloads\imgui-js\example\index.html
-                    iframe.src = "imgui-js/example/index.html";
+                    // Use the official imgui-js example hosted on GitHub Pages.
+                    iframe.src = "https://flyover.github.io/imgui-js/example/";
                     iframeLoaded = true;
                 }
             });

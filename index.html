@@ -68,6 +68,48 @@
 
         a { color: #4a90e2; text-decoration: none; }
         a:hover { text-decoration: underline; }
+
+        .imgui-button {
+            margin-top: 15px;
+            padding: 6px 12px;
+            background-color: #3a6db4;
+            border: 1px solid #1e3a5f;
+            color: var(--imgui-text);
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .imgui-button:hover {
+            background-color: #4a90e2;
+        }
+
+        #imgui-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 9999;
+            display: none; /* shown when debug is launched */
+        }
+
+        #imgui-overlay iframe {
+            width: 100%;
+            height: 100%;
+            display: block;
+            border: none;
+        }
+
+        #imgui-overlay-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 4px 8px;
+            background: #661111;
+            border: 1px solid #aa4444;
+            color: #fff;
+            cursor: pointer;
+            font-size: 12px;
+            z-index: 10000;
+        }
     </style>
 </head>
 <body>
@@ -82,6 +124,9 @@
                 <a href="mailto:cj.l.osborne@gmail.com">Email</a> | 
                 <a href="https://www.linkedin.com/in/ci-osborne-083950301/">LinkedIn</a> [cite: 7, 8, 9]
             </div>
+            <button id="launch-imgui-debug" class="imgui-button">
+                Launch Interactive Console Debug
+            </button>
         </div>
     </div>
 
@@ -139,6 +184,39 @@
             </div>
         </div>
     </div>
+
+    <!-- Full-screen ImGui overlay (uses imgui-js example in an iframe) -->
+    <div id="imgui-overlay">
+        <button id="imgui-overlay-close">Close ImGui Debug</button>
+        <iframe id="imgui-iframe" src="" title="ImGui Debug Console"></iframe>
+    </div>
+
+    <script>
+        (function () {
+            const launchButton = document.getElementById('launch-imgui-debug');
+            const overlay = document.getElementById('imgui-overlay');
+            const closeButton = document.getElementById('imgui-overlay-close');
+            const iframe = document.getElementById('imgui-iframe');
+
+            let iframeLoaded = false;
+
+            launchButton.addEventListener('click', async () => {
+                overlay.style.display = 'block';
+
+                // Lazy-load the ImGui example the first time the overlay is opened.
+                if (!iframeLoaded) {
+                    // This path assumes the cloned imgui-js repo lives next to this index.html
+                    // at: C:\Users\cjrea\Downloads\imgui-js\example\index.html
+                    iframe.src = "imgui-js/example/index.html";
+                    iframeLoaded = true;
+                }
+            });
+
+            closeButton.addEventListener('click', () => {
+                overlay.style.display = 'none';
+            });
+        })();
+    </script>
 
 </body>
 </html>

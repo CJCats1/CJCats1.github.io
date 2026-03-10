@@ -1,221 +1,457 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CJ Osborne | Debug Console</title>
-    <style>
-        :root {
-            --imgui-bg: #0f0f0f;
-            --imgui-window-bg: #1a1a1a;
-            --imgui-header: #2e4d82; /* ImGui Blue */
-            --imgui-text: #f0f0f0;
-            --imgui-accent: #4a90e2;
-            --imgui-border: #444444;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CJ Osborne // Software Engineer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --terminal-bg: #000000;
+      --terminal-text: #ffffff;
+      --terminal-header: #244B7E;
+      --terminal-header-hover: #2d5a94;
+    }
 
-        body {
-            background-color: var(--imgui-bg);
-            color: var(--imgui-text);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            font-size: 13px; /* Standard ImGui font feel */
-            margin: 0; padding: 20px;
-        }
+    * {
+      box-sizing: border-box;
+    }
 
-        .window {
-            background-color: var(--imgui-window-bg);
-            border: 1px solid var(--imgui-border);
-            margin-bottom: 25px;
-            box-shadow: 5px 5px 15px rgba(0,0,0,0.5);
-        }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: var(--terminal-bg);
+      color: var(--terminal-text);
+      font-family: 'IBM Plex Mono', 'Consolas', 'Monaco', monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
 
-        .window-header {
-            background-color: var(--imgui-header);
-            padding: 4px 10px;
-            font-weight: bold;
-            display: flex;
-            justify-content: space-between;
-            cursor: default;
-        }
+    .card {
+      max-width: 900px;
+      margin: 0 auto;
+    }
 
-        .content { padding: 15px; }
+    .card-title {
+      color: var(--terminal-text);
+      font-size: 1rem;
+      font-weight: 500;
+      margin: 0 0 16px;
+      padding: 0;
+    }
 
-        h2 { font-size: 16px; margin: 0 0 10px 0; color: var(--imgui-accent); }
-        
-        .tree-node { margin-left: 15px; border-left: 1px solid #444; padding-left: 10px; margin-bottom: 5px; }
-        .tree-label { color: #9cdcfe; font-weight: bold; }
+    .section {
+      margin-bottom: 12px;
+    }
 
-        .media-box {
-            background: #000;
-            border: 1px solid #333;
-            width: 100%;
-            aspect-ratio: 16/9;
-            margin: 10px 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #555;
-        }
+    .section-header {
+      background: var(--terminal-header);
+      padding: 8px 12px;
+      font-weight: 500;
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
 
-        .tag {
-            display: inline-block;
-            background: #333;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 11px;
-            margin-right: 5px;
-        }
+    .section-header:hover {
+      background: var(--terminal-header-hover);
+    }
 
-        a { color: #4a90e2; text-decoration: none; }
-        a:hover { text-decoration: underline; }
+    .section-header::before {
+      content: '▼';
+      font-size: 10px;
+      transition: transform 0.2s;
+      color: var(--terminal-text);
+    }
 
-        .imgui-button {
-            margin-top: 15px;
-            padding: 6px 12px;
-            background-color: #3a6db4;
-            border: 1px solid #1e3a5f;
-            color: var(--imgui-text);
-            font-size: 12px;
-            cursor: pointer;
-        }
+    .section.collapsed .section-header::before {
+      content: '►';
+    }
 
-        .imgui-button:hover {
-            background-color: #4a90e2;
-        }
+    .section-body {
+      padding: 12px 0 12px 20px;
+    }
 
-        #imgui-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.95);
-            z-index: 9999;
-            display: none; /* shown when debug is launched */
-        }
+    .section.collapsed .section-body {
+      display: none;
+    }
 
-        #imgui-overlay iframe {
-            width: 100%;
-            height: 100%;
-            display: block;
-            border: none;
-        }
+    .section-line {
+      margin: 6px 0;
+      padding-left: 8px;
+    }
 
-        #imgui-overlay-close {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            padding: 4px 8px;
-            background: #661111;
-            border: 1px solid #aa4444;
-            color: #fff;
-            cursor: pointer;
-            font-size: 12px;
-            z-index: 10000;
-        }
-    </style>
+    .section-line::before {
+      content: '► ';
+      color: var(--terminal-text);
+    }
+
+    .hero {
+      margin-bottom: 20px;
+    }
+
+    .hero .card-title {
+      margin-bottom: 8px;
+    }
+
+    .hero .section-line {
+      margin: 4px 0;
+    }
+
+    h1, h2 {
+      font-family: inherit;
+      font-weight: 500;
+      margin: 0 0 8px;
+      color: var(--terminal-text);
+      font-size: 1.1rem;
+    }
+
+    a {
+      color: var(--terminal-text);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .terminal-btn {
+      display: inline-block;
+      padding: 6px 14px;
+      background: var(--terminal-header);
+      color: var(--terminal-text);
+      border: none;
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      margin: 8px 8px 0 0;
+    }
+
+    .terminal-btn:hover {
+      background: var(--terminal-header-hover);
+    }
+
+    .project-block {
+      margin-bottom: 24px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid #222;
+    }
+
+    .project-block:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .project-block h2 {
+      font-size: 1rem;
+      margin: 12px 0 6px;
+      color: var(--terminal-text);
+    }
+
+    .project-block h2::before {
+      content: '► ';
+    }
+
+    .project-meta {
+      color: #b0b0b0;
+      font-size: 12px;
+      margin-bottom: 8px;
+      padding-left: 20px;
+    }
+
+    .project-meta::before {
+      content: '► ';
+    }
+
+    .project-block p {
+      margin: 0 0 8px;
+      padding-left: 20px;
+    }
+
+    .project-block p::before {
+      content: '► ';
+    }
+
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .gallery-item {
+      border: 1px solid #333;
+      background: #0a0a0a;
+      overflow: hidden;
+    }
+
+    .gallery-item img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .gallery-item span {
+      display: block;
+      padding: 6px 8px;
+      font-size: 11px;
+      color: #b0b0b0;
+    }
+
+    .gallery-item span::before {
+      content: '► ';
+    }
+
+    .skills-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 8px 16px;
+      margin-top: 8px;
+    }
+
+    .skills-grid span {
+      padding: 4px 0;
+      padding-left: 20px;
+      color: var(--terminal-text);
+    }
+
+    .skills-grid span::before {
+      content: '► ';
+    }
+
+    .contact-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .contact-list li {
+      margin: 6px 0;
+      padding-left: 20px;
+    }
+
+    .contact-list li::before {
+      content: '► ';
+    }
+
+    .contact-list a {
+      display: inline;
+    }
+
+    .gif-showcase {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .gif-showcase .gallery-item {
+      flex: 1 1 200px;
+      max-width: 320px;
+    }
+  </style>
 </head>
 <body>
 
-    <div class="window" style="max-width: 500px;">
-        <div class="window-header"><span>Main Menu</span><span>_ □ x</span></div>
-        <div class="content">
-            <p><strong>User:</strong> CJ Osborne [cite: 1]</p>
-            <p><strong>Role:</strong> Graphics / Physics / Systems Engineer [cite: 2]</p>
-            <p><strong>Status:</strong> Expected Graduation May 2026 (DigiPen) [cite: 15, 16]</p>
-            <div class="contact-links">
-                <a href="mailto:cj.l.osborne@gmail.com">Email</a> | 
-                <a href="https://www.linkedin.com/in/ci-osborne-083950301/">LinkedIn</a> [cite: 7, 8, 9]
-            </div>
-            <button id="launch-imgui-debug" class="imgui-button">
-                Launch Interactive Console Debug
-            </button>
+  <div class="card">
+    <div class="hero">
+      <p class="card-title">CJ Osborne - Portfolio</p>
+      <div class="section">
+        <div class="section-header">Title</div>
+        <div class="section-body">
+          <p class="section-line">Software Engineer / Graphics / Physics</p>
+          <p class="section-line">DigiPen Institute of Technology · Expected May 2026</p>
         </div>
-    </div>
-
-    <div class="window">
-        <div class="window-header"><span>Project: Specter Inspector (Physics/Systems)</span><span>_ □ x</span></div>
-        <div class="content">
-            <div class="tag">C++</div> <div class="tag">AABB</div> <div class="tag">Custom Engine</div> [cite: 56, 57, 58, 62]
-            <div class="media-box">INSERT: CLIP SHOWING DEBUG BOXES & RAYCASTS</div>
-            
-            <div class="tree-node">
-                <span class="tree-label">▼ Physics System</span>
-                <p>Developed custom AABB collision and point-line raycasting for smooth interaction[cite: 57, 58].</p>
-            </div>
-            <div class="tree-node">
-                <span class="tree-label">▼ Battery System</span>
-                <p>Engineered the core logic for the window-dragging battery mechanics[cite: 55, 56].</p>
-            </div>
-            <div class="tree-node">
-                <span class="tree-label">▼ Shaders</span>
-                <p>Custom GLSL/HLSL particle systems and feedback shaders[cite: 59, 64].</p>
-            </div>
+      </div>
+      <div class="section">
+        <div class="section-header">Contact</div>
+        <div class="section-body">
+          <p class="section-line">Phone: 303-210-9656</p>
+          <p class="section-line">email: <a href="mailto:cj.l.osborne@gmail.com">cj.l.osborne@gmail.com</a></p>
         </div>
-    </div>
-
-    <div class="window">
-        <div class="window-header"><span>Project: Barton (Unreal Tooling)</span><span>_ □ x</span></div>
-        <div class="content">
-            <div class="tag">UE 5.4</div> <div class="tag">GPT-4o</div> <div class="tag">Tools</div> [cite: 48, 70]
-            <div class="media-box">INSERT: VIDEO OF GPT INTERACTION & DESIGNER FACE TOOL</div>
-            
-            <div class="tree-node">
-                <span class="tree-label">▼ GenAI Integration</span>
-                <p>Integrated ChatGPT 4o into the UE5 actor interaction system[cite: 47, 48, 70].</p>
-            </div>
-            <div class="tree-node">
-                <span class="tree-label">▼ Technical Art Tools</span>
-                <p>Created face-changing shaders and tools for artists to manage sidekick expressions[cite: 47, 49].</p>
-            </div>
+      </div>
+      <div class="section">
+        <div class="section-header">Location</div>
+        <div class="section-body">
+          <p class="section-line">Seattle (willing to relocate)</p>
         </div>
+      </div>
     </div>
 
-    <div class="window">
-        <div class="window-header"><span>Project: TheEngine (Graphics API)</span><span>_ □ x</span></div>
-        <div class="content">
-            <div class="tag">DX11</div> <div class="tag">OpenGL</div> <div class="tag">Vulkan</div> [cite: 28, 67, 68]
-            <div class="media-box">INSERT: GRID OF JELLY TETRIS / FLUID SIMS / ANDROID BUILD</div>
-            
-            <div class="tree-node">
-                <span class="tree-label">▼ Backend Status</span>
-                <p>Running on DX11, OpenGL, and GLES. Currently implementing Vulkan and DX12[cite: 67, 68].</p>
-            </div>
-            <div class="tree-node">
-                <span class="tree-label">▼ API Transition</span>
-                <p>Refactored custom engine into a portable API for cross-project integration[cite: 62].</p>
-            </div>
+    <div class="section">
+      <div class="section-header">About</div>
+      <div class="section-body">
+        <p class="section-line">Detail-oriented Computer Science student with a strong foundation in C++ systems programming and tool development. Seeking an entry-level Software Engineering role to apply experience in full-stack internal tools, automation, and data analysis to support high-performance hardware validation.</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">Projects</div>
+      <div class="section-body">
+
+      <div class="project-block">
+        <h2>Barton</h2>
+        <p class="project-meta">Aug 2024 – May 2025 · Unreal Engine 5.4, ChatGPT 4o, Perforce · LVLUP Expo 2025</p>
+        <p>3D puzzle game where the player collaborates with a genAI-powered sidekick via conversation to solve environmental puzzles. Implemented tools for an interaction system. Collaboration of 20 developers (artists, designers, sound) for cohesive gameplay. Featured in LVLUP Expo 2025.</p>
+        <div class="gallery">
+          <div class="gallery-item">
+            <img src="assets/Barton/Screenshot 2026-03-10 114732.png" alt="Barton gameplay" />
+            <span>Screenshot 1</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/Barton/Screenshot 2026-03-10 114746.png" alt="Barton gameplay" />
+            <span>Screenshot 2</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/Barton/Screenshot 2026-03-10 115214.png" alt="Barton gameplay" />
+            <span>Screenshot 3</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/Barton/Screenshot 2026-03-10 115239.png" alt="Barton gameplay" />
+            <span>Screenshot 4</span>
+          </div>
         </div>
+      </div>
+
+      <div class="project-block">
+        <h2>Specter Inspector</h2>
+        <p class="project-meta">Aug 2023 – May 2024 · C++, physics, FMOD</p>
+        <p>Puzzle game set within desktop windows that players drag and interact with to navigate the world. Served as systems/physics engineer: complex physics with AABB calculations, point-line collision detection, custom particle system, FMOD audio.</p>
+        <div class="gif-showcase">
+          <div class="gallery-item">
+            <img src="assets/Spector Inspector/debugboxes.gif" alt="Debug boxes" />
+            <span>Debug boxes</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/Spector Inspector/gettingHurt.gif" alt="Getting hurt" />
+            <span>Getting hurt</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/Spector Inspector/usingBattery.gif" alt="Using battery" />
+            <span>Using battery</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="project-block">
+        <h2>The Engine</h2>
+        <p class="project-meta">Personal project · Custom game engine</p>
+        <p>Custom game engine: graphics pipeline (OpenGL, DirectX11, Vulkan), GLSL/HLSL shaders, FMOD, custom physics (AABB, raycasts), particle systems, real-time ray tracing. Below: 2D partitioning, clustering (DBSCAN, K-means), FLIP/SPH fluid sim, falling sand, and more.</p>
+        <div class="gallery">
+          <div class="gallery-item">
+            <img src="assets/TheEngine/2DpartitionMoving.gif" alt="2D partition moving" />
+            <span>2D partition</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/TheEngine/DBSCAN.gif" alt="DBSCAN" />
+            <span>DBSCAN</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/TheEngine/kmeans.gif" alt="K-means" />
+            <span>K-means</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/TheEngine/concentricCircles.gif" alt="Concentric circles" />
+            <span>Concentric circles</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/TheEngine/DifferentTrees.gif" alt="Different trees" />
+            <span>Trees</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/TheEngine/fallingSandStart.gif" alt="Falling sand start" />
+            <span>Falling sand</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/TheEngine/fallingSandChaos.gif" alt="Falling sand chaos" />
+            <span>Sand chaos</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/TheEngine/fallingSandAirPressure.gif" alt="Falling sand air pressure" />
+            <span>Air pressure</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/TheEngine/fallingSandAirVelocity.gif" alt="Falling sand air velocity" />
+            <span>Air velocity</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/TheEngine/flip-Ball.gif" alt="FLIP ball" />
+            <span>FLIP ball</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/TheEngine/flip-addingParticles.gif" alt="FLIP adding particles" />
+            <span>FLIP particles</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/TheEngine/flip-rotatingAndPickingUp.gif" alt="FLIP rotating" />
+            <span>FLIP rotate</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/TheEngine/sph-ball.gif" alt="SPH ball" />
+            <span>SPH ball</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/TheEngine/sph-start.gif" alt="SPH start" />
+            <span>SPH start</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/TheEngine/sph-debug.gif" alt="SPH debug" />
+            <span>SPH debug</span>
+          </div>
+          <div class="gallery-item">
+            <img src="assets/TheEngine/spiderSolitaire.gif" alt="Spider solitaire" />
+            <span>Spider solitaire</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="project-block">
+        <h2>AtlasNet</h2>
+        <p class="project-meta">Aug 2025 – present</p>
+        <p>Server meshing API for MMOs and large-scale continuous worlds with dynamic server partitioning. Assisted with networking back-end, partitioning heuristics, and a visual debugging tool for server partitioning and entity management. Web-based dashboard for real-time monitoring. Small team of 4; exploring ML heuristics for partitioning.</p>
+      </div>
+    </div>
     </div>
 
-    <!-- Full-screen ImGui overlay (uses imgui-js example in an iframe) -->
-    <div id="imgui-overlay">
-        <button id="imgui-overlay-close">Close ImGui Debug</button>
-        <iframe id="imgui-iframe" src="" title="ImGui Debug Console"></iframe>
+    <div class="section">
+      <div class="section-header">Skills</div>
+      <div class="section-body">
+      <div class="skills-grid">
+        <span><strong>Languages:</strong> C++, C#, HLSL, GLSL, Python, MATLAB</span>
+        <span><strong>Engines:</strong> Unity, Unreal Engine</span>
+        <span><strong>Tools:</strong> Git, Visual Studio, FMOD, Perforce, ClickUp, Trello</span>
+        <span><strong>Graphics:</strong> OpenGL, DirectX11, Vulkan</span>
+        <span><strong>Other:</strong> Agile, Scrum, OOD, LLM integration (ChatGPT 4o)</span>
+      </div>
     </div>
+  </div>
 
-    <script>
-        (function () {
-            const launchButton = document.getElementById('launch-imgui-debug');
-            const overlay = document.getElementById('imgui-overlay');
-            const closeButton = document.getElementById('imgui-overlay-close');
-            const iframe = document.getElementById('imgui-iframe');
+    <div class="section">
+      <div class="section-header">Contact</div>
+      <div class="section-body">
+        <ul class="contact-list">
+          <li><a href="mailto:cj.l.osborne@gmail.com">cj.l.osborne@gmail.com</a></li>
+          <li><a href="https://www.linkedin.com/in/cj-osborne-083950301/" target="_blank" rel="noopener">LinkedIn</a></li>
+          <li>303-210-9656</li>
+          <li>Seattle, WA (Willing to Relocate)</li>
+        </ul>
+        <a href="assets/Resume-4.pdf" class="terminal-btn" target="_blank" rel="noopener">Download Resume (PDF)</a>
+      </div>
+    </div>
+  </div>
 
-            let iframeLoaded = false;
-
-            launchButton.addEventListener('click', async () => {
-                overlay.style.display = 'block';
-
-                // Lazy-load the ImGui example the first time the overlay is opened.
-                if (!iframeLoaded) {
-                    // Use the official imgui-js example hosted on GitHub Pages.
-                    iframe.src = "https://flyover.github.io/imgui-js/example/";
-                    iframeLoaded = true;
-                }
-            });
-
-            closeButton.addEventListener('click', () => {
-                overlay.style.display = 'none';
-            });
-        })();
-    </script>
-
+  <script>
+    document.querySelectorAll('.section-header').forEach(bar => {
+      bar.addEventListener('click', () => {
+        bar.closest('.section').classList.toggle('collapsed');
+      });
+    });
+  </script>
 </body>
 </html>

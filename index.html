@@ -255,6 +255,79 @@
       flex: 1 1 200px;
       max-width: 320px;
     }
+
+    /* The Engine: room under each asset for notes + code */
+    .engine-gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .engine-item {
+      border: 1px solid #333;
+      background: #0a0a0a;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .engine-media img {
+      width: 100%;
+      height: auto;
+      display: block;
+      vertical-align: top;
+    }
+
+    .engine-media span {
+      display: block;
+      padding: 8px 10px;
+      font-size: 11px;
+      color: #b0b0b0;
+    }
+
+    .engine-media span::before {
+      content: '► ';
+    }
+
+    .engine-notes {
+      flex: 1;
+      min-height: 160px;
+      padding: 12px 12px 16px;
+      border-top: 1px solid #282828;
+      font-size: 12px;
+      line-height: 1.55;
+      color: #c8c8c8;
+    }
+
+    .engine-notes:empty::before {
+      content: '/* Add explanation or code snippets below */';
+      color: #555;
+      font-style: italic;
+    }
+
+    .engine-notes pre {
+      margin: 0 0 10px;
+      padding: 10px;
+      background: #0f0f0f;
+      border: 1px solid #333;
+      overflow-x: auto;
+      font-size: 11px;
+      line-height: 1.45;
+      white-space: pre;
+    }
+
+    .engine-notes pre:last-child {
+      margin-bottom: 0;
+    }
+
+    .engine-notes p {
+      margin: 0 0 8px;
+    }
+
+    .engine-notes p:last-child {
+      margin-bottom: 0;
+    }
   </style>
 </head>
 <body>
@@ -296,27 +369,189 @@
       <div class="section-body">
 
       <div class="project-block">
+        <h2>The Engine</h2>
+        <p class="project-meta">Personal project · Custom game engine</p>
+        <p>Custom C++ engine spanning rendering, audio, and simulation: multiple backends (OpenGL, DirectX 11, Vulkan), GLSL/HLSL shaders, FMOD integration, and in-house physics (AABB, raycasts, particles). The clips below are experiments on that stack—spatial structures, clustering, fluids, granular media, and small tools—each with a dedicated panel underneath for APIs, algorithms, and code you want to call out.</p>
+        <p>Rendering covers shader work and real-time techniques; simulation covers collision, integration, and debug draws.</p>
+        <div class="engine-gallery">
+          <div class="engine-item">
+            <div class="engine-media">
+              <img src="assets/TheEngine/2DpartitionMoving.gif" alt="2D partition moving" />
+              <span>2D partition</span>
+            </div>
+            <div class="engine-notes">
+              <p>This scene runs three 2D partition backends behind one UI toggle: <strong>Quadtree</strong>, <strong>AABB tree</strong>, and <strong>KD-tree</strong>. The moving sprites are updated first, then the active structure is rebuilt from current positions so the debug lines always match live data.</p>
+              <p>In the clip you are seeing that live rebuild behavior: as entities move and bounce, partition cells/splits update continuously (driven by the scene update loop and sim speed controls, plus faster clustering timers in fast mode).</p>
+              <p><strong>Big-O:</strong> full rebuild each update is typically <code>O(n log n)</code> for balanced trees (worst <code>O(n²)</code> if degenerate input); point/range query is usually near <code>O(log n + k)</code> with <code>k</code> results, and can degrade toward <code>O(n)</code> in worst cases.</p>
+            </div>
+          </div>
+          <div class="engine-item">
+            <div class="engine-media">
+              <img src="assets/TheEngine/DBSCAN.gif" alt="DBSCAN" />
+              <span>DBSCAN</span>
+            </div>
+            <div class="engine-notes">
+              <p><strong>DBSCAN</strong> here uses classic density expansion (core / border / noise) with a BFS-style cluster grow. Parameters come from the panel: <code>eps</code> and <code>minPts</code>, and clusters are recolored every recompute.</p>
+              <p><strong>Important implementation detail:</strong> current neighbor lookup is a direct scan of active entities (distance check against every point), so neighborhood discovery is <code>O(n)</code> per point and clustering is <code>O(n²)</code> in practice. The quadtree/KD/AABB structures are still updated and rendered in parallel for partition visualization and for other scene queries.</p>
+              <p>DBSCAN updates are throttled for stability/perf (<code>~0.1s</code> normal, <code>~0.05s</code> fast mode), which is why the cluster view can lag slightly behind raw entity motion.</p>
+            </div>
+          </div>
+          <div class="engine-item">
+            <div class="engine-media">
+              <img src="assets/TheEngine/kmeans.gif" alt="K-means" />
+              <span>K-means</span>
+            </div>
+            <div class="engine-notes">
+              <p><strong>K-means</strong> runs Lloyd iterations (assign to nearest centroid, then recenter). You can drive <code>K</code>, run manually, and toggle fast mode in the same panel used in the GIF capture.</p>
+              <p>This implementation uses the <strong>quadtree</strong> as a spatial helper during assignment/centroid updates (querying nearby entities around dynamic search radii), then falls back to direct centroid checks when needed. So it is partition-assisted rather than a pure brute-force pass.</p>
+              <p><strong>Big-O:</strong> baseline Lloyd is <code>O(i * n * k)</code>. With the quadtree helper, practical constants drop on clustered data, but worst-case still trends toward the same bound (or worse if local membership checks become dense).</p>
+            </div>
+          </div>
+          <div class="engine-item">
+            <div class="engine-media">
+              <img src="assets/TheEngine/concentricCircles.gif" alt="Concentric circles" />
+              <span>Concentric circles</span>
+            </div>
+            <div class="engine-notes">
+              <p>These are generated concentric-ring datasets from the scene tools (heavy and light presets) and then clustered with <strong>K-means</strong> or <strong>DBSCAN</strong>.</p>
+              <p>It is a good stress test: K-means pushes toward centroid blobs, while DBSCAN tracks density-connected ring segments when <code>eps</code>/<code>minPts</code> are tuned for the spacing and noise level.</p>
+            </div>
+          </div>
+          <div class="engine-item">
+            <div class="engine-media">
+              <img src="assets/TheEngine/DifferentTrees.gif" alt="Different trees" />
+              <span>Trees</span>
+            </div>
+            <div class="engine-notes">
+              <p>This GIF is the side-by-side tree comparison view: quadtree cells, AABB boxes, and KD split regions (with optional split-line rendering).</p>
+              <p><strong>Big-O summary:</strong> balanced build around <code>O(n log n)</code>, typical query around <code>O(log n + k)</code>, worst-case <code>O(n)</code> when partitions become unbalanced. Use this clip for structure comparison, and the 2D partition clip for the dynamic “rebuild while moving” behavior.</p>
+            </div>
+          </div>
+          <div class="engine-item">
+            <div class="engine-media">
+              <img src="assets/TheEngine/fallingSandStart.gif" alt="Falling sand start" />
+              <span>Falling sand</span>
+            </div>
+            <div class="engine-notes">
+              <p>I’ve always liked <strong>falling-sand</strong> games, so I built one in-engine as a cellular-automata sandbox with a fixed grid, per-cell materials, and immediate brush tools.</p>
+              <p>The scene runs a double-buffer update (<code>grid -> gridNext</code>) with configurable <code>substeps</code> and an alternating traversal mode to improve flow stability. Baseline cost is linear in grid size per pass: roughly <code>O(W*H)</code>.</p>
+            </div>
+          </div>
+          <div class="engine-item">
+            <div class="engine-media">
+              <img src="assets/TheEngine/fallingSandChaos.gif" alt="Falling sand chaos" />
+              <span>Sand chaos</span>
+            </div>
+            <div class="engine-notes">
+              <p>“Chaos” comes from explicit cross-material rules: <strong>sand + water -> mud</strong>, <strong>fire dries mud -> sand</strong>, <strong>water + lava -> steam + stone</strong>, <strong>lava melts stone/metal</strong>, <strong>acid corrodes neighbors</strong>, and <strong>flammables (wood/oil/gas) ignite</strong> with lifetime-driven burnout.</p>
+              <p>Motion itself is state-based (powder/liquid/gas/solid) with density swaps, random lateral flow for liquids, gas repulsion, and air-force bias. Even though each rule is local, the coupled updates create large emergent structures.</p>
+            </div>
+          </div>
+          <div class="engine-item">
+            <div class="engine-media">
+              <img src="assets/TheEngine/fallingSandAirPressure.gif" alt="Falling sand air pressure" />
+              <span>Air pressure</span>
+            </div>
+            <div class="engine-notes">
+              <p><strong>Air pressure</strong> is solved on the same simulation grid using divergence/gradient passes plus advection (kernel smoothing + bilinear sample + wall/path checks). Solids are encoded in block maps so walls zero nearby velocity and constrain flow.</p>
+              <p><strong>Complexity:</strong> pressure update is linear per pass, about <code>O(W*H)</code> each substep, with several full-grid passes in sequence. Effective frame cost is <code>O(substeps * W * H)</code>.</p>
+              <p><strong>Optimizations/stability controls in code:</strong> double-buffer swaps, edge damping + hard boundary clamps, magnitude-based loss (weak pressure decays faster), blocked-cell skips, and impulse throttling in the tool path.</p>
+            </div>
+          </div>
+          <div class="engine-item">
+            <div class="engine-media">
+              <img src="assets/TheEngine/fallingSandAirVelocity.gif" alt="Falling sand air velocity" />
+              <span>Air velocity</span>
+            </div>
+            <div class="engine-notes">
+              <p><strong>Air velocity</strong> is coupled to pressure and heat: pressure gradients drive flow, hot regions add buoyant upward motion (convection), optional vorticity confinement adds swirl, and particle motion injects local momentum/pressure back into the air fields.</p>
+              <p><strong>Complexity:</strong> velocity + convection remains full-grid linear per pass (<code>O(W*H)</code>), so with substeps it scales as <code>O(substeps * W * H)</code>.</p>
+              <p><strong>Optimizations/stability:</strong> clamped magnitudes, adaptive-like loss on weak velocities, edge damping, blocked-air masks, and double buffering to keep the simulation stable while preserving responsive impulses and draft effects from fire.</p>
+            </div>
+          </div>
+          <div class="engine-item">
+            <div class="engine-media">
+              <img src="assets/TheEngine/flip-Ball.gif" alt="FLIP ball" />
+              <span>FLIP ball</span>
+            </div>
+            <div class="engine-notes">
+              <p>Core FLIP pass in this scene: <strong>particles -> MAC grid scatter</strong>, divergence build, <strong>Jacobi pressure solve</strong>, pressure-gradient projection, viscosity/damping, then <strong>grid -> particles</strong> with the UI blend slider controlling PIC/FLIP behavior.</p>
+              <p>This clip also shows the interactive rigid <strong>ball</strong> coupled to the fluid (spring-to-mouse and buoyancy), so particles are constrained against both box boundaries and the moving collider.</p>
+              <p>For visuals, FLIP uses a <strong>metaball-inspired method</strong>: each particle draws with <code>MetaballFalloff.png</code> under additive blending, then threshold/smoothing controls shape the final fluid silhouette. I also prototyped a shader path in <code>Metaball.hlsl</code> and <code>MetaballCompute.hlsl</code> for explicit field accumulation + surface extraction.</p>
+              <p><strong>Complexity per substep:</strong> transfers are ~<code>O(P)</code>, pressure/projection/viscosity are ~<code>O(G * I)</code> with <code>I</code> Jacobi iterations, then advection/boundary are ~<code>O(P)</code>. Total frame cost scales as <code>O(substeps * (P + G*I))</code> before collision passes.</p>
+            </div>
+          </div>
+          <div class="engine-item">
+            <div class="engine-media">
+              <img src="assets/TheEngine/flip-addingParticles.gif" alt="FLIP adding particles" />
+              <span>FLIP particles</span>
+            </div>
+            <div class="engine-notes">
+              <p>Same FLIP solver, but focused on <strong>live particle injection</strong> via brush/emit-rate controls and optional force brush interaction. New particles are spawned into the same pressure-constrained flow each fixed step.</p>
+              <p><strong>Scaling:</strong> adding particles raises transfer, advection, coloring, and collision work approximately linearly in <code>P</code>. The grid-side solve remains <code>O(G * I)</code>, so tuning particle count vs. Jacobi iterations controls quality/performance tradeoff.</p>
+              <p><strong>Optimization path in code:</strong> collision can run naive pairwise (<code>O(P²)</code>) or use a <strong>spatial hash</strong> neighbor pass (~near-linear for typical distributions), with collision iterations exposed in UI.</p>
+            </div>
+          </div>
+          <div class="engine-item">
+            <div class="engine-media">
+              <img src="assets/TheEngine/flip-rotatingAndPickingUp.gif" alt="FLIP rotating" />
+              <span>FLIP rotate</span>
+            </div>
+            <div class="engine-notes">
+              <p>This run highlights the <strong>rotating box</strong> and particle pickup tools: container angle is changed in real time, and particles can be grabbed/moved while the solver continues to enforce boundary collisions in box-local space.</p>
+              <p>The boundary sprites are visualized with adjustable offsets, while particle confinement uses the rotated domain math each step, so the fluid remains stable as the container orientation changes.</p>
+              <p><strong>Complexity:</strong> same FLIP backbone (<code>O(substeps * (P + G*I))</code>) plus boundary/collision handling on particles; hashed collisions keep interaction-heavy moments tractable compared to pure <code>O(P²)</code>.</p>
+            </div>
+          </div>
+          <div class="engine-item">
+            <div class="engine-media">
+              <img src="assets/TheEngine/sph-ball.gif" alt="SPH ball" />
+              <span>SPH ball</span>
+            </div>
+            <div class="engine-notes">
+              <p><strong>SPH</strong> here is particle-only (LiquidFun-inspired): spatial-grid neighbors, kernel-based density/pressure, pressure+viscosity forces, integration, boundaries, then optional contact sleeping/position constraints and XSPH smoothing for stability.</p>
+              <p><strong>Big-O:</strong> naive SPH neighbor search is <code>O(n²)</code>, but this scene uses a spatial grid so neighbor gathering is near-linear for typical distributions (roughly <code>O(n * k)</code>, small local <code>k</code>). Collisions are similarly accelerated by hashed buckets.</p>
+              <p>Graphics uses the same <strong>metaball-inspired method</strong> as FLIP: additive draws of <code>MetaballFalloff.png</code> per particle, with UI controls for metaball radius/threshold/smoothing; velocity tinting still drives the fluid color.</p>
+            </div>
+          </div>
+          <div class="engine-item">
+            <div class="engine-media">
+              <img src="assets/TheEngine/sph-start.gif" alt="SPH start" />
+              <span>SPH start</span>
+            </div>
+            <div class="engine-notes">
+              <p>Early-state SPH dam test: neighbor lists are rebuilt from the spatial grid each step, then reused across density/pressure/force passes for coherence and less repeated lookup work.</p>
+              <p>In practice, tuning <code>smoothing radius</code> and <code>grid cell scale</code> is the core tradeoff: larger support stabilizes density estimates but raises neighbor count; smaller support is faster but can increase noise/compressibility artifacts.</p>
+            </div>
+          </div>
+          <div class="engine-item">
+            <div class="engine-media">
+              <img src="assets/TheEngine/sph-debug.gif" alt="SPH debug" />
+              <span>SPH debug</span>
+            </div>
+            <div class="engine-notes">
+              <p><strong>Debug view</strong> focuses on performance/stability telemetry: neighbor checks, density calculations, average neighbors, and current grid dimensions, plus toggles for optimized SoA layout, island simulation, contact sleeping, XSPH smoothing, and low-speed stabilization.</p>
+              <p>On the graphics side, this view is where I iterate the metaball-inspired look against physically-driven velocity colors, so solver tuning and visual tuning stay coupled.</p>
+            </div>
+          </div>
+          <div class="engine-item">
+            <div class="engine-media">
+              <img src="assets/TheEngine/spiderSolitaire.gif" alt="Spider solitaire" />
+              <span>Spider solitaire</span>
+            </div>
+            <div class="engine-notes">
+              <p>Spider Solitaire turned into a surprisingly deep systems project: strict sequence validation (same-suit descending runs), stack-aware drag/drop, auto-flip of newly exposed cards, stock dealing, completed-run detection (K->A), and foundation transfer.</p>
+              <p>The <strong>undo pipeline</strong> is a full state snapshot system (tableau/foundation/stock plus per-card face-up state), with special handling to avoid immediate re-removal of restored sequences on the next frame. This made complex move chains and recovery from misdrops feel reliable.</p>
+              <p>I also mixed in lightweight card physics and tooling: spring-based settling on deal/drop, magnetic attraction toward valid targets, optional jitter test/debug overlays, and a win celebration mode that throws cards with gravity + spin while preserving game-state integrity.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="project-block">
         <h2>Barton</h2>
         <p class="project-meta">Aug 2024 – May 2025 · Unreal Engine 5.4, ChatGPT 4o, Perforce · LVLUP Expo 2025</p>
         <p>3D puzzle game where the player collaborates with a genAI-powered sidekick via conversation to solve environmental puzzles. Implemented tools for an interaction system. Collaboration of 20 developers (artists, designers, sound) for cohesive gameplay. Featured in LVLUP Expo 2025.</p>
-        <div class="gallery">
-          <div class="gallery-item">
-            <img src="assets/Barton/Screenshot 2026-03-10 114732.png" alt="Barton gameplay" />
-            <span>Screenshot 1</span>
-          </div>
-          <div class="gallery-item">
-            <img src="assets/Barton/Screenshot 2026-03-10 114746.png" alt="Barton gameplay" />
-            <span>Screenshot 2</span>
-          </div>
-          <div class="gallery-item">
-            <img src="assets/Barton/Screenshot 2026-03-10 115214.png" alt="Barton gameplay" />
-            <span>Screenshot 3</span>
-          </div>
-          <div class="gallery-item">
-            <img src="assets/Barton/Screenshot 2026-03-10 115239.png" alt="Barton gameplay" />
-            <span>Screenshot 4</span>
-          </div>
-        </div>
       </div>
 
       <div class="project-block">
@@ -335,78 +570,6 @@
           <div class="gallery-item">
             <img src="assets/Spector Inspector/usingBattery.gif" alt="Using battery" />
             <span>Using battery</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="project-block">
-        <h2>The Engine</h2>
-        <p class="project-meta">Personal project · Custom game engine</p>
-        <p>Custom game engine: graphics pipeline (OpenGL, DirectX11, Vulkan), GLSL/HLSL shaders, FMOD, custom physics (AABB, raycasts), particle systems, real-time ray tracing. Below: 2D partitioning, clustering (DBSCAN, K-means), FLIP/SPH fluid sim, falling sand, and more.</p>
-        <div class="gallery">
-          <div class="gallery-item">
-            <img src="assets/TheEngine/2DpartitionMoving.gif" alt="2D partition moving" />
-            <span>2D partition</span>
-          </div>
-          <div class="gallery-item">
-            <img src="assets/TheEngine/DBSCAN.gif" alt="DBSCAN" />
-            <span>DBSCAN</span>
-          </div>
-          <div class="gallery-item">
-            <img src="assets/TheEngine/kmeans.gif" alt="K-means" />
-            <span>K-means</span>
-          </div>
-          <div class="gallery-item">
-            <img src="assets/TheEngine/concentricCircles.gif" alt="Concentric circles" />
-            <span>Concentric circles</span>
-          </div>
-          <div class="gallery-item">
-            <img src="assets/TheEngine/DifferentTrees.gif" alt="Different trees" />
-            <span>Trees</span>
-          </div>
-          <div class="gallery-item">
-            <img src="assets/TheEngine/fallingSandStart.gif" alt="Falling sand start" />
-            <span>Falling sand</span>
-          </div>
-          <div class="gallery-item">
-            <img src="assets/TheEngine/fallingSandChaos.gif" alt="Falling sand chaos" />
-            <span>Sand chaos</span>
-          </div>
-          <div class="gallery-item">
-            <img src="assets/TheEngine/fallingSandAirPressure.gif" alt="Falling sand air pressure" />
-            <span>Air pressure</span>
-          </div>
-          <div class="gallery-item">
-            <img src="assets/TheEngine/fallingSandAirVelocity.gif" alt="Falling sand air velocity" />
-            <span>Air velocity</span>
-          </div>
-          <div class="gallery-item">
-            <img src="assets/TheEngine/flip-Ball.gif" alt="FLIP ball" />
-            <span>FLIP ball</span>
-          </div>
-          <div class="gallery-item">
-            <img src="assets/TheEngine/flip-addingParticles.gif" alt="FLIP adding particles" />
-            <span>FLIP particles</span>
-          </div>
-          <div class="gallery-item">
-            <img src="assets/TheEngine/flip-rotatingAndPickingUp.gif" alt="FLIP rotating" />
-            <span>FLIP rotate</span>
-          </div>
-          <div class="gallery-item">
-            <img src="assets/TheEngine/sph-ball.gif" alt="SPH ball" />
-            <span>SPH ball</span>
-          </div>
-          <div class="gallery-item">
-            <img src="assets/TheEngine/sph-start.gif" alt="SPH start" />
-            <span>SPH start</span>
-          </div>
-          <div class="gallery-item">
-            <img src="assets/TheEngine/sph-debug.gif" alt="SPH debug" />
-            <span>SPH debug</span>
-          </div>
-          <div class="gallery-item">
-            <img src="assets/TheEngine/spiderSolitaire.gif" alt="Spider solitaire" />
-            <span>Spider solitaire</span>
           </div>
         </div>
       </div>
@@ -441,7 +604,7 @@
           <li>303-210-9656</li>
           <li>Seattle, WA (Willing to Relocate)</li>
         </ul>
-        <a href="assets/Resume-4.pdf" class="terminal-btn" target="_blank" rel="noopener">Download Resume (PDF)</a>
+        <a href="assets/CJ%20Osborne%20-%20Resume.pdf" class="terminal-btn" target="_blank" rel="noopener">Download Resume (PDF)</a>
       </div>
     </div>
   </div>

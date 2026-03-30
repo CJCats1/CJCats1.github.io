@@ -387,6 +387,26 @@
           </div>
           <div class="engine-item">
             <div class="engine-media">
+              <img src="assets/TheEngine/Partition3DQuadAndKD.gif" alt="3D partitioning with quadtree and kd-tree" />
+              <span>3D partition (Quad/KD)</span>
+            </div>
+            <div class="engine-notes">
+              <p>3D partition debug mode for moving mesh entities: the scene can switch between <strong>Octree</strong> and <strong>3D KD-tree</strong> visualization and rebuilds from current entity positions while the simulation runs.</p>
+              <p><strong>Complexity:</strong> rebuild/insert is typically around <code>O(n log n)</code> for balanced spatial splits, with query behavior near <code>O(log n + k)</code> in common cases and <code>O(n)</code> worst case for degenerate distributions. This clip is mainly about comparing how each 3D partition subdivides live data.</p>
+            </div>
+          </div>
+          <div class="engine-item">
+            <div class="engine-media">
+              <img src="assets/TheEngine/shadowmapping3D.gif" alt="3D shadow mapping" />
+              <span>3D shadow mapping</span>
+            </div>
+            <div class="engine-notes">
+              <p>Shadow mapping path in the 3D partition scene: visible meshes are rendered into light-space depth maps first (depth-only pass), then sampled in the main lit pass for shadow tests. This setup supports <strong>two configurable directional lights</strong> with individual shadow toggles.</p>
+              <p>The debug preview uses a dedicated shader to visualize depth in grayscale/heatmap/linearized modes, which makes bias, near/far range, and light frustum tuning much easier. Quality controls in the scene include map size, filter mode (hard vs softer comparison sampling), and per-light ortho/near/far settings.</p>
+            </div>
+          </div>
+          <div class="engine-item">
+            <div class="engine-media">
               <img src="assets/TheEngine/DBSCAN.gif" alt="DBSCAN" />
               <span>DBSCAN</span>
             </div>

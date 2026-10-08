@@ -50,6 +50,19 @@ void VibratingStringEngine::StopAudio() {
     if (audioDeviceOwned_ && IsAudioDeviceReady()) { CloseAudioDevice(); audioDeviceOwned_ = false; }
 }
 
+void VibratingStringEngine::Update(double dt) {
+    ApplyRequests();
+    if (!active_.load(std::memory_order_acquire) || paused_.load(std::memory_order_acquire)) {
+        PublishSnapshot();
+        return;
+    }
+    const double clampedDt = std::clamp(dt, 0.0, 0.1);
+    const int steps = std::max(1, std::min(32, static_cast<int>(std::ceil(clampedDt / (1.0 / 480.0)))));
+    const double substepDt = clampedDt / static_cast<double>(steps);
+    for (int step = 0; step < steps; ++step) StepSubstep(substepDt);
+    PublishSnapshot();
+}
+
 void VibratingStringEngine::SetActive(bool active) { active_.store(active, std::memory_order_release); }
 void VibratingStringEngine::SetPaused(bool paused) { paused_.store(paused, std::memory_order_release); }
 void VibratingStringEngine::SetMuted(bool muted) { muted_.store(muted, std::memory_order_release); }

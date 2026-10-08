@@ -51,6 +51,7 @@ public:
 
     bool StartAudio();
     void StopAudio();
+    void Update(double dt);
 
     void SetActive(bool active);
     void SetPaused(bool paused);

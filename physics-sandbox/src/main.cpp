@@ -71,6 +71,7 @@ struct AppState {
     int selectedPianoKey = -1;
     float accumulator = 0.0f;
     bool shutdownRequested = false;
+    bool audioReady = false;
 };
 
 Vector3 Add(Vector3 a, Vector3 b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
@@ -1222,6 +1223,9 @@ void RunFrame(AppState& app) {
         HandleFlipMouseInput(app.fluid, app.simulation, app.view);
         HandleSphMouseInput(app.sph, app.simulation, app.view);
         HandlePowderMouseInput(app.powder, app.simulation, app.view, app.powderBrushRadius, app.camera);
+#ifdef __EMSCRIPTEN__
+        if (!app.audioReady && app.simulation == SimulationKind::VibratingString) app.string.Update(GetFrameTime());
+#endif
         if (!app.paused && app.simulation != SimulationKind::VibratingString) {
             app.accumulator = std::min(app.accumulator + GetFrameTime(), 0.1f);
             while (app.accumulator >= kFixedTimeStep) {
@@ -1290,8 +1294,12 @@ int main() {
     SetTargetFPS(60);
 #endif
     static AppState app;
+#ifdef __EMSCRIPTEN__
+    app.audioReady = false;
+#else
     const bool audioReady = app.string.StartAudio();
-    (void)audioReady;
+    app.audioReady = audioReady;
+#endif
 #ifdef __EMSCRIPTEN__
     gWebApp = &app;
     emscripten_set_main_loop(RunWebFrame, 0, 1);

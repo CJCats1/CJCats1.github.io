@@ -11,6 +11,12 @@ endif()
 
 include(FetchContent)
 
+if (EMSCRIPTEN)
+    # Raylib 5.5 needs the platform selected explicitly when it is brought in
+    # through FetchContent; otherwise its GLFW dependency can select X11.
+    set(PLATFORM Web CACHE STRING "raylib target platform" FORCE)
+endif()
+
 option(SPRING_MASS_FETCH_RAYLIB "Download raylib when it is not installed" ON)
 
 find_package(raylib 5.0 QUIET)

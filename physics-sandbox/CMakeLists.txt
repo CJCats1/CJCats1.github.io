@@ -53,6 +53,7 @@ if (EMSCRIPTEN)
     target_link_options(spring_mass_sandbox PRIVATE
         "-sUSE_GLFW=3"
         "-sALLOW_MEMORY_GROWTH=1"
+        "-sASYNCIFY"
     )
 endif()
 

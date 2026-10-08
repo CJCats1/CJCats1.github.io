@@ -40,8 +40,11 @@ jobs:
           cp index.html site/index.html
           cp -R assets site/assets
           cp physics-sandbox/build-web/spring_mass_sandbox.html site/simulations/physics-sandbox/index.html
-          cp physics-sandbox/build-web/spring_mass_sandbox.js site/simulations/physics-sandbox/
-          cp physics-sandbox/build-web/spring_mass_sandbox.wasm site/simulations/physics-sandbox/
+          VERSION="${GITHUB_SHA::12}"
+          cp physics-sandbox/build-web/spring_mass_sandbox.js "site/simulations/physics-sandbox/spring_mass_sandbox-${VERSION}.js"
+          cp physics-sandbox/build-web/spring_mass_sandbox.wasm "site/simulations/physics-sandbox/spring_mass_sandbox-${VERSION}.wasm"
+          sed -i "s/spring_mass_sandbox\\.js/spring_mass_sandbox-${VERSION}.js/g" site/simulations/physics-sandbox/index.html
+          sed -i "s/spring_mass_sandbox\\.wasm/spring_mass_sandbox-${VERSION}.wasm/g" "site/simulations/physics-sandbox/spring_mass_sandbox-${VERSION}.js"
           touch site/.nojekyll
 
       - name: Configure Pages

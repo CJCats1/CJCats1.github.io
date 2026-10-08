@@ -946,9 +946,10 @@ Rectangle SimulationMenuCard(int index) {
     const int count = static_cast<int>(sizeof(kSimulationMenu) / sizeof(kSimulationMenu[0]));
     const float menuWidth = std::min(1100.0f, static_cast<float>(GetScreenWidth() - 80));
     const float cardWidth = (menuWidth - 24.0f) * 0.5f;
-    const float cardHeight = 92.0f;
-    const float gap = 16.0f;
-    const float top = 145.0f;
+    const int rows = (count + 1) / 2;
+    const float top = 130.0f;
+    const float gap = rows > 4 ? 10.0f : 16.0f;
+    const float cardHeight = std::clamp((static_cast<float>(GetScreenHeight()) - top - 70.0f - gap * static_cast<float>(rows - 1)) / static_cast<float>(rows), 58.0f, 92.0f);
     const float left = (static_cast<float>(GetScreenWidth()) - menuWidth) * 0.5f;
     const int column = index % 2;
     const int row = index / 2;

@@ -12,9 +12,113 @@
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
+
+EM_JS(void, InstallWebMouseBridge, (), {
+    const canvas = document.querySelector('canvas');
+    if (!canvas || canvas.__physicsMouseBridgeInstalled) return;
+    canvas.__physicsMouseBridgeInstalled = true;
+
+    const state = Module.physicsMouse = {
+        x: 0,
+        y: 0,
+        buttons: 0,
+        pressed: 0,
+        wheel: 0,
+        deltaX: 0,
+        deltaY: 0
+    };
+    const buttonBit = (button) => {
+        // PointerEvent uses 2 for right and 1 for middle; raylib uses 1 for right and 2 for middle.
+        const raylibButton = button === 2 ? 1 : (button === 1 ? 2 : 0);
+        return 1 << raylibButton;
+    };
+    const updatePosition = (event) => {
+        const bounds = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / Math.max(1, bounds.width);
+        const scaleY = canvas.height / Math.max(1, bounds.height);
+        const nextX = (event.clientX - bounds.left) * scaleX;
+        const nextY = (event.clientY - bounds.top) * scaleY;
+        state.deltaX += nextX - state.x;
+        state.deltaY += nextY - state.y;
+        state.x = nextX;
+        state.y = nextY;
+    };
+
+    canvas.addEventListener('pointermove', (event) => {
+        updatePosition(event);
+        event.preventDefault();
+    }, {passive: false});
+    canvas.addEventListener('pointerdown', (event) => {
+        updatePosition(event);
+        const bit = buttonBit(event.button);
+        state.buttons |= bit;
+        state.pressed |= bit;
+        if (canvas.setPointerCapture) canvas.setPointerCapture(event.pointerId);
+        event.preventDefault();
+    }, {passive: false});
+    canvas.addEventListener('pointerup', (event) => {
+        updatePosition(event);
+        const bit = buttonBit(event.button);
+        state.buttons &= ~bit;
+        if (canvas.releasePointerCapture) canvas.releasePointerCapture(event.pointerId);
+        event.preventDefault();
+    }, {passive: false});
+    canvas.addEventListener('wheel', (event) => {
+        state.wheel += event.deltaY < 0 ? 1 : -1;
+        event.preventDefault();
+    }, {passive: false});
+    canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+});
+
+EM_JS(int, WebMousePressed, (int button), {
+    const state = Module.physicsMouse;
+    if (!state) return 0;
+    const bit = 1 << button;
+    if ((state.pressed & bit) === 0) return 0;
+    state.pressed &= ~bit;
+    return 1;
+});
+
+EM_JS(int, WebMouseDown, (int button), {
+    const state = Module.physicsMouse;
+    return state && (state.buttons & (1 << button)) ? 1 : 0;
+});
+
+EM_JS(float, WebMouseX, (), { return Module.physicsMouse ? Module.physicsMouse.x : 0; });
+EM_JS(float, WebMouseY, (), { return Module.physicsMouse ? Module.physicsMouse.y : 0; });
+EM_JS(float, WebMouseWheel, (), {
+    const state = Module.physicsMouse;
+    if (!state) return 0;
+    const wheel = state.wheel;
+    state.wheel = 0;
+    return wheel;
+});
+EM_JS(float, WebMouseDeltaX, (), { return Module.physicsMouse ? Module.physicsMouse.deltaX : 0; });
+EM_JS(float, WebMouseDeltaY, (), {
+    const state = Module.physicsMouse;
+    if (!state) return 0;
+    const delta = state.deltaY;
+    state.deltaX = 0;
+    state.deltaY = 0;
+    return delta;
+});
 #endif
 
 namespace {
+
+#ifdef __EMSCRIPTEN__
+bool AppMouseButtonPressed(int button) { return WebMousePressed(button) != 0; }
+bool AppMouseButtonDown(int button) { return WebMouseDown(button) != 0; }
+Vector2 AppMousePosition() { return {WebMouseX(), WebMouseY()}; }
+Vector2 AppMouseDelta() { return {WebMouseDeltaX(), WebMouseDeltaY()}; }
+float AppMouseWheelMove() { return WebMouseWheel(); }
+#else
+bool AppMouseButtonPressed(int button) { return IsMouseButtonPressed(button); }
+bool AppMouseButtonDown(int button) { return IsMouseButtonDown(button); }
+Vector2 AppMousePosition() { return GetMousePosition(); }
+Vector2 AppMouseDelta() { return GetMouseDelta(); }
+float AppMouseWheelMove() { return GetMouseWheelMove(); }
+#endif
 
 constexpr float kGridStep = 0.5f;
 constexpr float kRestLength = 3.0f;
@@ -154,8 +258,8 @@ void MoveAnchor(SpringMass& s, Vector3 direction) {
 }
 
 void HandleCameraInput(OrbitCamera& c, ViewMode view) {
-    if (view == ViewMode::ThreeD && IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) { const Vector2 d = GetMouseDelta(); c.yaw -= d.x * 0.006f; c.pitch = std::clamp(c.pitch - d.y * 0.006f, -1.2f, 1.2f); }
-    c.distance = std::clamp(c.distance - GetMouseWheelMove() * 0.8f, 5.0f, 26.0f);
+    if (view == ViewMode::ThreeD && AppMouseButtonDown(MOUSE_BUTTON_RIGHT)) { const Vector2 d = AppMouseDelta(); c.yaw -= d.x * 0.006f; c.pitch = std::clamp(c.pitch - d.y * 0.006f, -1.2f, 1.2f); }
+    c.distance = std::clamp(c.distance - AppMouseWheelMove() * 0.8f, 5.0f, 26.0f);
 }
 
 void HandleInput(SpringMass& spring, BouncingBall& ball, NewtonCooling& cooling, VibratingStringEngine& string, FlipFluid& fluid, SphFluid& sph, PowderScene& powder, BuoyancyScene& buoyancy,
@@ -828,8 +932,8 @@ void DrawPowder3D(const PowderScene& powder) {
 
 void HandlePowderMouseInput(PowderScene& powder, SimulationKind simulation, ViewMode view, int& brushRadius, const OrbitCamera& orbit) {
     if (simulation != SimulationKind::Powder) return;
-    const Vector2 mouse = GetMousePosition();
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    const Vector2 mouse = AppMousePosition();
+    if (AppMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         const int materialIndex = PowderPaletteHit(mouse);
         if (materialIndex >= 0) {
             powder.SetSelectedMaterial(kPowderPalette[materialIndex]);
@@ -849,7 +953,7 @@ void HandlePowderMouseInput(PowderScene& powder, SimulationKind simulation, View
         int y = 0;
         int z = 0;
         if (!PowderRayToVolumeCell(mouse, orbit, x, y, z)) return;
-        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        if (AppMouseButtonDown(MOUSE_BUTTON_LEFT)) {
             if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) powder.EraseVolume(x, y, z, brushRadius);
             else powder.PaintVolume(x, y, z, brushRadius, powder.SelectedMaterial());
         }
@@ -859,8 +963,8 @@ void HandlePowderMouseInput(PowderScene& powder, SimulationKind simulation, View
     int x = 0;
     int y = 0;
     if (!PowderScreenToCell(mouse, x, y)) return;
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) powder.Paint(x, y, brushRadius, powder.SelectedMaterial());
-    if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) powder.Erase(x, y, brushRadius);
+    if (AppMouseButtonDown(MOUSE_BUTTON_LEFT)) powder.Paint(x, y, brushRadius, powder.SelectedMaterial());
+    if (AppMouseButtonDown(MOUSE_BUTTON_RIGHT)) powder.Erase(x, y, brushRadius);
 }
 
 Rectangle SimulationMenuCard(int index) {
@@ -892,8 +996,8 @@ void HandleSimulationMenuInput(SimulationKind& simulation, bool& menuOpen, int& 
         menuOpen = false;
         return;
     }
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        const Vector2 mouse = GetMousePosition();
+    if (AppMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        const Vector2 mouse = AppMousePosition();
         for (int i = 0; i < count; ++i) {
             if (CheckCollisionPointRec(mouse, SimulationMenuCard(i))) {
                 cursor = i;
@@ -929,14 +1033,14 @@ void DrawSimulationMenu(SimulationKind simulation, int cursor) {
 }
 
 void HandleFlipMouseInput(FlipFluid& fluid, SimulationKind simulation, ViewMode view) {
-    if (simulation != SimulationKind::FlipFluid || view != ViewMode::TwoD || !IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) return;
-    const FlipVec2 point = FlipScreenToWorld(GetMousePosition());
+    if (simulation != SimulationKind::FlipFluid || view != ViewMode::TwoD || !AppMouseButtonPressed(MOUSE_BUTTON_LEFT)) return;
+    const FlipVec2 point = FlipScreenToWorld(AppMousePosition());
     fluid.Poke({point.x, point.y, FlipFluid::kWorldDepth * 0.5}, {0.0, 5.0, 0.0});
 }
 
 void HandleSphMouseInput(SphFluid& fluid, SimulationKind simulation, ViewMode view) {
-    if (simulation != SimulationKind::SphFluid || view != ViewMode::TwoD || !IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) return;
-    fluid.Poke(SphScreenToWorld(GetMousePosition()), {0.0, 5.0, 0.0});
+    if (simulation != SimulationKind::SphFluid || view != ViewMode::TwoD || !AppMouseButtonPressed(MOUSE_BUTTON_LEFT)) return;
+    fluid.Poke(SphScreenToWorld(AppMousePosition()), {0.0, 5.0, 0.0});
 }
 
 
@@ -987,8 +1091,8 @@ int PianoKeyAtPoint(Vector2 point) {
 
 void HandlePianoInput(VibratingStringEngine& string, SimulationKind simulation, ViewMode view, int& selectedKey) {
     if (simulation != SimulationKind::VibratingString || view != ViewMode::Split) return;
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        const int key = PianoKeyAtPoint(GetMousePosition());
+    if (AppMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        const int key = PianoKeyAtPoint(AppMousePosition());
         if (key >= 0) { selectedKey = key; string.PlayFrequency(kPianoFrequencies[key]); }
     }
     constexpr KeyboardKey whiteKeys[8] = {KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B, KEY_N, KEY_M, KEY_COMMA};
@@ -1289,6 +1393,7 @@ int main() {
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(1280, 800, "Physics Sandbox");
 #ifdef __EMSCRIPTEN__
+    InstallWebMouseBridge();
     SetTargetFPS(0);
 #else
     SetTargetFPS(60);

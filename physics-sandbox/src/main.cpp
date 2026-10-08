@@ -1284,7 +1284,9 @@ void RunWebFrame() {
 int main() {
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(1280, 800, "Physics Sandbox");
+#ifndef __EMSCRIPTEN__
     SetTargetFPS(60);
+#endif
     static AppState app;
     const bool audioReady = app.string.StartAudio();
     (void)audioReady;

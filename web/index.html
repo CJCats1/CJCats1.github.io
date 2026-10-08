@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Physics Sandbox // WebGL2</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="site-bar">
+        <div>
+          <div class="eyebrow">CJ OSBORNE // EXPERIMENTAL RENDERER</div>
+          <h1>PHYSICS SANDBOX <span>WEBGL2 EDITION</span></h1>
+        </div>
+        <div class="site-links">
+          <span id="rendererStatus" class="status">INITIALIZING</span>
+          <a href="../physics-sandbox/">RAYLIB EDITION</a>
+          <a href="../../">PORTFOLIO</a>
+        </div>
+      </header>
+
+      <section class="window-frame" aria-label="Interactive WebGL2 simulation window">
+        <div class="window-bar">
+          <div class="window-title"><span class="window-dot"></span>SIMULATION_WINDOW / THREE.JS + WEBGL2</div>
+          <div class="window-actions">
+            <button id="pauseButton" type="button">PAUSE</button>
+            <button id="resetButton" type="button">RESET</button>
+          </div>
+        </div>
+
+        <div class="workspace">
+          <aside class="scene-browser">
+            <div class="panel-label">SCENES / 11</div>
+            <div id="sceneList" class="scene-list"></div>
+            <div class="key-hint">1-9, 0, B select<br />SPACE pause · R reset</div>
+          </aside>
+
+          <section class="viewport-panel">
+            <div class="viewport-heading">
+              <div>
+                <div id="sceneNumber" class="scene-number">SIM 1</div>
+                <h2 id="sceneTitle">SPRING / MASS</h2>
+                <p id="sceneDescription">A movable anchor, gravity, damping, and a visual spring.</p>
+              </div>
+              <div id="sceneMode" class="scene-mode">3D / LIVE</div>
+            </div>
+            <div class="viewport-wrap">
+              <canvas id="simCanvas" aria-label="Interactive WebGL2 physics simulation"></canvas>
+              <div id="fallback" class="fallback" hidden></div>
+              <div class="viewport-overlay">DRAG TO ORBIT · WHEEL TO ZOOM · WEBGL2</div>
+            </div>
+          </section>
+
+          <aside class="inspector">
+            <div class="panel-label">LIVE TELEMETRY</div>
+            <dl id="telemetry" class="telemetry"></dl>
+            <div class="panel-label controls-label">SCENE NOTES</div>
+            <p id="sceneNotes" class="scene-notes"></p>
+          </aside>
+        </div>
+      </section>
+
+      <footer class="footer-note">The original raylib/Emscripten build remains available beside this renderer. This folder is a separate WebGL2 experiment.</footer>
+    </main>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

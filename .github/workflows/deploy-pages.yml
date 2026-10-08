@@ -45,6 +45,8 @@ jobs:
           cp physics-sandbox/build-web/spring_mass_sandbox.wasm "site/simulations/physics-sandbox/spring_mass_sandbox-${VERSION}.wasm"
           sed -i "s/spring_mass_sandbox\\.js/spring_mass_sandbox-${VERSION}.js/g" site/simulations/physics-sandbox/index.html
           sed -i "s/spring_mass_sandbox\\.wasm/spring_mass_sandbox-${VERSION}.wasm/g" "site/simulations/physics-sandbox/spring_mass_sandbox-${VERSION}.js"
+          mkdir -p site/simulations/physics-sandbox-web
+          cp -R web/. site/simulations/physics-sandbox-web/
           touch site/.nojekyll
 
       - name: Configure Pages

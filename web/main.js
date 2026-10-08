@@ -42,6 +42,7 @@ controls.enableDamping = true;
 controls.target.set(0, 1.4, 0);
 controls.minDistance = 4;
 controls.maxDistance = 24;
+controls.update();
 
 world.add(new THREE.HemisphereLight(0x9edbff, 0x101525, 2.4));
 const keyLight = new THREE.DirectionalLight(0xffffff, 3.2);

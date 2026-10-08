@@ -21,15 +21,16 @@ const status = document.querySelector("#rendererStatus");
 const world = new THREE.Scene();
 world.background = new THREE.Color(0x050913);
 
-const context = canvas.getContext("webgl2", { antialias: true, alpha: false });
-if (!context) {
+let renderer;
+try {
+  // Three.js WebGLRenderer uses WebGL2 in current releases and owns the context lifecycle.
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+} catch (error) {
   fallback.hidden = false;
   fallback.textContent = "WebGL2 is unavailable in this browser. Use the Raylib Edition link above or enable hardware graphics.";
   status.textContent = "WEBGL2 UNAVAILABLE";
-  throw new Error("WebGL2 unavailable");
+  throw error;
 }
-
-const renderer = new THREE.WebGLRenderer({ canvas, context, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true;

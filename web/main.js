@@ -101,7 +101,8 @@ const addSphere = (radius, color, position = [0, 0, 0]) => {
   return mesh;
 };
 const addLine = (points, color, opacity = 1) => {
-  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), lineMaterial(color, opacity));
+  const initialPoints = points.length > 0 ? points : [new THREE.Vector3(), new THREE.Vector3(0, 0.001, 0)];
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(initialPoints), lineMaterial(color, opacity));
   sceneRoot.add(line);
   return line;
 };

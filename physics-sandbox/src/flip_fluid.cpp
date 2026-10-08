@@ -123,6 +123,10 @@ void FlipFluid::Reset() {
     pressureIterations_ = 0;
     nextSpawnLayer_ = 0;
     substeps_ = 1;
+    gravity_ = -9.81;
+    flipRatio_ = 0.0;
+    solidObstacle_ = {{5.6, 1.9, 2.0}, {1.1, 1.4, 1.0}};
+    solidObstacleEnabled_ = true;
     solidObstacleVelocity_ = {};
     buoyantBox_ = {{3.5, 5.2, 1.5}, {0.8, 0.8, 0.8}};
     buoyantBoxVelocity_ = {};
@@ -384,7 +388,6 @@ void FlipFluid::EnforceWalls() {
 }
 
 void FlipFluid::EnforceSolidWalls() {
-    if (!solidObstacleEnabled_) return;
     for (int k = 0; k < kGridDepth; ++k) {
         for (int j = 0; j < kGridHeight; ++j) {
             for (int i = 0; i < kGridWidth; ++i) {
@@ -392,7 +395,7 @@ void FlipFluid::EnforceSolidWalls() {
                 const FlipVec3 cellCenter = {(static_cast<double>(i) + 0.5) * kCellSize,
                                              (static_cast<double>(j) + 0.5) * kCellSize,
                                              (static_cast<double>(k) + 0.5) * kCellSize};
-                const FlipVec3 boundaryVelocity = ContainsBox(cellCenter, buoyantBox_) ? buoyantBoxVelocity_ : solidObstacleVelocity_;
+                const FlipVec3 boundaryVelocity = ContainsBox(cellCenter, buoyantBox_) ? buoyantBoxVelocity_ : (solidObstacleEnabled_ ? solidObstacleVelocity_ : FlipVec3{});
                 u_[UIndex(i, j, k)] = boundaryVelocity.x;
                 u_[UIndex(i + 1, j, k)] = boundaryVelocity.x;
                 v_[VIndex(i, j, k)] = boundaryVelocity.y;

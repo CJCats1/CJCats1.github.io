@@ -4,6 +4,10 @@
 #include "sph_fluid.h"
 #include "powder_scene.h"
 #include "buoyancy_scene.h"
+#include "cloth_elastic_solids_scene.h"
+#include "beam_bending_scene.h"
+#include "bridge_builder_scene.h"
+#include "web_mouse.h"
 
 #include <algorithm>
 #include <cmath>
@@ -13,41 +17,22 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
 
-EM_JS(void, InstallWebMouseBridge, (), {
+EM_JS(void, InstallPhysicsMouseBridge, (), {
     const canvas = document.querySelector('canvas');
     if (!canvas || canvas.__physicsMouseBridgeInstalled) return;
     canvas.__physicsMouseBridgeInstalled = true;
-
-    const state = Module.physicsMouse = {
-        x: 0,
-        y: 0,
-        buttons: 0,
-        pressed: 0,
-        wheel: 0,
-        deltaX: 0,
-        deltaY: 0
-    };
-    const buttonBit = (button) => {
-        // PointerEvent uses 2 for right and 1 for middle; raylib uses 1 for right and 2 for middle.
-        const raylibButton = button === 2 ? 1 : (button === 1 ? 2 : 0);
-        return 1 << raylibButton;
-    };
+    const state = Module.physicsMouse = {x: 0, y: 0, buttons: 0, pressed: 0, released: 0, wheel: 0, deltaX: 0, deltaY: 0};
+    const buttonBit = (button) => 1 << (button === 2 ? 1 : (button === 1 ? 2 : 0));
     const updatePosition = (event) => {
         const bounds = canvas.getBoundingClientRect();
-        const scaleX = canvas.width / Math.max(1, bounds.width);
-        const scaleY = canvas.height / Math.max(1, bounds.height);
-        const nextX = (event.clientX - bounds.left) * scaleX;
-        const nextY = (event.clientY - bounds.top) * scaleY;
+        const nextX = (event.clientX - bounds.left) * canvas.width / Math.max(1, bounds.width);
+        const nextY = (event.clientY - bounds.top) * canvas.height / Math.max(1, bounds.height);
         state.deltaX += nextX - state.x;
         state.deltaY += nextY - state.y;
         state.x = nextX;
         state.y = nextY;
     };
-
-    canvas.addEventListener('pointermove', (event) => {
-        updatePosition(event);
-        event.preventDefault();
-    }, {passive: false});
+    canvas.addEventListener('pointermove', (event) => { updatePosition(event); event.preventDefault(); }, {passive: false});
     canvas.addEventListener('pointerdown', (event) => {
         updatePosition(event);
         const bit = buttonBit(event.button);
@@ -60,17 +45,15 @@ EM_JS(void, InstallWebMouseBridge, (), {
         updatePosition(event);
         const bit = buttonBit(event.button);
         state.buttons &= ~bit;
+        state.released |= bit;
         if (canvas.releasePointerCapture) canvas.releasePointerCapture(event.pointerId);
         event.preventDefault();
     }, {passive: false});
-    canvas.addEventListener('wheel', (event) => {
-        state.wheel += event.deltaY < 0 ? 1 : -1;
-        event.preventDefault();
-    }, {passive: false});
+    canvas.addEventListener('wheel', (event) => { state.wheel += event.deltaY < 0 ? 1 : -1; event.preventDefault(); }, {passive: false});
     canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 });
 
-EM_JS(int, WebMousePressed, (int button), {
+EM_JS(int, PhysicsWebMousePressed, (int button), {
     const state = Module.physicsMouse;
     if (!state) return 0;
     const bit = 1 << button;
@@ -78,23 +61,26 @@ EM_JS(int, WebMousePressed, (int button), {
     state.pressed &= ~bit;
     return 1;
 });
-
-EM_JS(int, WebMouseDown, (int button), {
+EM_JS(int, PhysicsWebMouseDown, (int button), { const state = Module.physicsMouse; return state && (state.buttons & (1 << button)) ? 1 : 0; });
+EM_JS(int, PhysicsWebMouseReleased, (int button), {
     const state = Module.physicsMouse;
-    return state && (state.buttons & (1 << button)) ? 1 : 0;
+    if (!state) return 0;
+    const bit = 1 << button;
+    if ((state.released & bit) === 0) return 0;
+    state.released &= ~bit;
+    return 1;
 });
-
-EM_JS(float, WebMouseX, (), { return Module.physicsMouse ? Module.physicsMouse.x : 0; });
-EM_JS(float, WebMouseY, (), { return Module.physicsMouse ? Module.physicsMouse.y : 0; });
-EM_JS(float, WebMouseWheel, (), {
+EM_JS(float, PhysicsWebMouseX, (), { return Module.physicsMouse ? Module.physicsMouse.x : 0; });
+EM_JS(float, PhysicsWebMouseY, (), { return Module.physicsMouse ? Module.physicsMouse.y : 0; });
+EM_JS(float, PhysicsWebMouseWheel, (), {
     const state = Module.physicsMouse;
     if (!state) return 0;
     const wheel = state.wheel;
     state.wheel = 0;
     return wheel;
 });
-EM_JS(float, WebMouseDeltaX, (), { return Module.physicsMouse ? Module.physicsMouse.deltaX : 0; });
-EM_JS(float, WebMouseDeltaY, (), {
+EM_JS(float, PhysicsWebMouseDeltaX, (), { return Module.physicsMouse ? Module.physicsMouse.deltaX : 0; });
+EM_JS(float, PhysicsWebMouseDeltaY, (), {
     const state = Module.physicsMouse;
     if (!state) return 0;
     const delta = state.deltaY;
@@ -102,30 +88,23 @@ EM_JS(float, WebMouseDeltaY, (), {
     state.deltaY = 0;
     return delta;
 });
+
+Vector2 PhysicsMousePosition() { return {PhysicsWebMouseX(), PhysicsWebMouseY()}; }
+bool PhysicsMouseButtonPressed(int button) { return PhysicsWebMousePressed(button) != 0; }
+bool PhysicsMouseButtonDown(int button) { return PhysicsWebMouseDown(button) != 0; }
+bool PhysicsMouseButtonReleased(int button) { return PhysicsWebMouseReleased(button) != 0; }
+Vector2 PhysicsMouseDelta() { return {PhysicsWebMouseDeltaX(), PhysicsWebMouseDeltaY()}; }
+float PhysicsMouseWheelMove() { return PhysicsWebMouseWheel(); }
 #endif
 
 namespace {
-
-#ifdef __EMSCRIPTEN__
-bool AppMouseButtonPressed(int button) { return WebMousePressed(button) != 0; }
-bool AppMouseButtonDown(int button) { return WebMouseDown(button) != 0; }
-Vector2 AppMousePosition() { return {WebMouseX(), WebMouseY()}; }
-Vector2 AppMouseDelta() { return {WebMouseDeltaX(), WebMouseDeltaY()}; }
-float AppMouseWheelMove() { return WebMouseWheel(); }
-#else
-bool AppMouseButtonPressed(int button) { return IsMouseButtonPressed(button); }
-bool AppMouseButtonDown(int button) { return IsMouseButtonDown(button); }
-Vector2 AppMousePosition() { return GetMousePosition(); }
-Vector2 AppMouseDelta() { return GetMouseDelta(); }
-float AppMouseWheelMove() { return GetMouseWheelMove(); }
-#endif
 
 constexpr float kGridStep = 0.5f;
 constexpr float kRestLength = 3.0f;
 constexpr float kGravity = -9.81f;
 constexpr float kFixedTimeStep = 1.0f / 120.0f;
 
-enum class SimulationKind { SpringMass, BouncingBall, NewtonCooling, VibratingString, FlipFluid, SphFluid, Powder, Buoyancy };
+enum class SimulationKind { SpringMass, BouncingBall, NewtonCooling, VibratingString, FlipFluid, SphFluid, Powder, Buoyancy, ClothElasticSolids, BeamBending, BridgeBuilder };
 enum class ViewMode { TwoD, ThreeD, Spectrum, Split };
 
 struct SpringMass {
@@ -154,30 +133,6 @@ struct NewtonCooling {
 
 struct OrbitCamera { float yaw = 0.72f; float pitch = 0.38f; float distance = 13.0f; };
 
-struct AppState {
-    SpringMass spring;
-    BouncingBall ball;
-    NewtonCooling cooling;
-    VibratingStringEngine string;
-    FlipFluid fluid;
-    SphFluid sph;
-    PowderScene powder;
-    BuoyancyScene buoyancy;
-    OrbitCamera camera;
-    bool paused = false;
-    bool muted = false;
-    bool menuOpen = true;
-    bool flipFrontView = false;
-    SimulationKind simulation = SimulationKind::SpringMass;
-    ViewMode view = ViewMode::ThreeD;
-    int menuCursor = 0;
-    int powderBrushRadius = 4;
-    int selectedPianoKey = -1;
-    float accumulator = 0.0f;
-    bool shutdownRequested = false;
-    bool audioReady = false;
-};
-
 Vector3 Add(Vector3 a, Vector3 b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
 Vector3 Subtract(Vector3 a, Vector3 b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
 Vector3 Scale(Vector3 value, float scalar) { return {value.x * scalar, value.y * scalar, value.z * scalar}; }
@@ -200,7 +155,10 @@ const SimulationMenuItem kSimulationMenu[] = {
     {SimulationKind::FlipFluid, "FLIP FLUID", "3D grid / PIC fluid solver", Color{42, 164, 239, 255}},
     {SimulationKind::SphFluid, "SPH FLUID", "3D particle fluid solver", Color{50, 196, 224, 255}},
     {SimulationKind::Powder, "POWDER", "Sand, liquids, gases and fire", Color{224, 185, 103, 255}},
-    {SimulationKind::Buoyancy, "BUOYANCY", "Floating rigid body reference", Color{106, 211, 229, 255}}
+    {SimulationKind::Buoyancy, "BUOYANCY", "Floating rigid body reference", Color{106, 211, 229, 255}},
+    {SimulationKind::ClothElasticSolids, "CLOTH / ELASTIC SOLIDS", "XPBD cloth and tetrahedral jelly gallery", Color{213, 92, 161, 255}},
+    {SimulationKind::BeamBending, "BEAM BENDING", "Euler-Bernoulli beam FEM gallery", Color{126, 235, 167, 255}},
+    {SimulationKind::BridgeBuilder, "BRIDGE BUILDER", "2D truss design and 3D load test", Color{255, 188, 92, 255}}
 };
 
 int SimulationMenuIndex(SimulationKind simulation) {
@@ -258,12 +216,15 @@ void MoveAnchor(SpringMass& s, Vector3 direction) {
 }
 
 void HandleCameraInput(OrbitCamera& c, ViewMode view) {
-    if (view == ViewMode::ThreeD && AppMouseButtonDown(MOUSE_BUTTON_RIGHT)) { const Vector2 d = AppMouseDelta(); c.yaw -= d.x * 0.006f; c.pitch = std::clamp(c.pitch - d.y * 0.006f, -1.2f, 1.2f); }
-    c.distance = std::clamp(c.distance - AppMouseWheelMove() * 0.8f, 5.0f, 26.0f);
+    if (view == ViewMode::ThreeD && PhysicsMouseButtonDown(MOUSE_BUTTON_RIGHT)) { const Vector2 d = PhysicsMouseDelta(); c.yaw -= d.x * 0.006f; c.pitch = std::clamp(c.pitch - d.y * 0.006f, -1.2f, 1.2f); }
+    c.distance = std::clamp(c.distance - PhysicsMouseWheelMove() * 0.8f, 5.0f, 26.0f);
 }
 
-void HandleInput(SpringMass& spring, BouncingBall& ball, NewtonCooling& cooling, VibratingStringEngine& string, FlipFluid& fluid, SphFluid& sph, PowderScene& powder, BuoyancyScene& buoyancy,
+Camera3D MakeCamera(const OrbitCamera& orbit, Vector3 target);
+
+void HandleInput(SpringMass& spring, BouncingBall& ball, NewtonCooling& cooling, VibratingStringEngine& string, FlipFluid& fluid, SphFluid& sph, PowderScene& powder, BuoyancyScene& buoyancy, ClothElasticSolidsScene& cloth, BeamBendingScene& beam, BridgeBuilderScene& bridge,
                  SimulationKind& simulation, ViewMode& view, bool& paused, bool& muted, OrbitCamera& camera, bool& flipFrontView) {
+    const bool bridgeHotkeySelection = IsKeyPressed(KEY_B) && simulation != SimulationKind::FlipFluid && simulation != SimulationKind::BridgeBuilder;
     if (IsKeyPressed(KEY_ONE)) simulation = SimulationKind::SpringMass;
     if (IsKeyPressed(KEY_TWO)) simulation = SimulationKind::BouncingBall;
     if (IsKeyPressed(KEY_THREE)) simulation = SimulationKind::NewtonCooling;
@@ -272,6 +233,9 @@ void HandleInput(SpringMass& spring, BouncingBall& ball, NewtonCooling& cooling,
     if (IsKeyPressed(KEY_SIX)) simulation = SimulationKind::SphFluid;
     if (IsKeyPressed(KEY_SEVEN)) simulation = SimulationKind::Powder;
     if (IsKeyPressed(KEY_EIGHT)) simulation = SimulationKind::Buoyancy;
+    if (IsKeyPressed(KEY_NINE)) simulation = SimulationKind::ClothElasticSolids;
+    if (IsKeyPressed(KEY_ZERO)) simulation = SimulationKind::BeamBending;
+    if (bridgeHotkeySelection) simulation = SimulationKind::BridgeBuilder;
     if (IsKeyPressed(KEY_TAB)) {
         if (simulation == SimulationKind::SpringMass) simulation = SimulationKind::BouncingBall;
         else if (simulation == SimulationKind::BouncingBall) simulation = SimulationKind::NewtonCooling;
@@ -280,6 +244,9 @@ void HandleInput(SpringMass& spring, BouncingBall& ball, NewtonCooling& cooling,
         else if (simulation == SimulationKind::FlipFluid) simulation = SimulationKind::SphFluid;
         else if (simulation == SimulationKind::SphFluid) simulation = SimulationKind::Powder;
         else if (simulation == SimulationKind::Powder) simulation = SimulationKind::Buoyancy;
+        else if (simulation == SimulationKind::Buoyancy) simulation = SimulationKind::ClothElasticSolids;
+        else if (simulation == SimulationKind::ClothElasticSolids) simulation = SimulationKind::BeamBending;
+        else if (simulation == SimulationKind::BeamBending) simulation = SimulationKind::BridgeBuilder;
         else simulation = SimulationKind::SpringMass;
     }
     if (IsKeyPressed(KEY_V)) {
@@ -388,6 +355,12 @@ void HandleInput(SpringMass& spring, BouncingBall& ball, NewtonCooling& cooling,
             if (powder.IsThreeDimensional()) powder.AddVolumeSource();
             else powder.AddImpulse(PowderScene::kGridWidth / 2, 40, 18);
         }
+    } else if (simulation == SimulationKind::ClothElasticSolids) {
+        cloth.HandleInput(MakeCamera(camera, cloth.FocusTarget()), view == ViewMode::ThreeD);
+    } else if (simulation == SimulationKind::BeamBending) {
+        beam.HandleInput(MakeCamera(camera, beam.FocusTarget()), view == ViewMode::ThreeD);
+    } else if (simulation == SimulationKind::BridgeBuilder) {
+        if (!bridgeHotkeySelection) bridge.HandleInput(MakeCamera(camera, bridge.FocusTarget()), view == ViewMode::ThreeD);
     } else {
         if (IsKeyPressed(KEY_LEFT_BRACKET)) buoyancy.AdjustWaterDensity(-50.0);
         if (IsKeyPressed(KEY_RIGHT_BRACKET)) buoyancy.AdjustWaterDensity(50.0);
@@ -407,11 +380,13 @@ void HandleInput(SpringMass& spring, BouncingBall& ball, NewtonCooling& cooling,
     HandleCameraInput(camera, view);
 }
 
-Camera3D MakeCamera(const OrbitCamera& orbit) {
-    const Vector3 target = {0.0f, 3.0f, 0.0f}; const float cp = std::cos(orbit.pitch); Camera3D c{};
+Camera3D MakeCamera(const OrbitCamera& orbit, Vector3 target) {
+    const float cp = std::cos(orbit.pitch); Camera3D c{};
     c.position = {target.x + orbit.distance * cp * std::sin(orbit.yaw), target.y + orbit.distance * std::sin(orbit.pitch), target.z + orbit.distance * cp * std::cos(orbit.yaw)};
     c.target = target; c.up = {0.0f, 1.0f, 0.0f}; c.fovy = 45.0f; c.projection = CAMERA_PERSPECTIVE; return c;
 }
+
+Camera3D MakeCamera(const OrbitCamera& orbit) { return MakeCamera(orbit, {0.0f, 3.0f, 0.0f}); }
 
 Camera3D MakeFlipCamera(const OrbitCamera& orbit, bool frontView) {
     if (!frontView) return MakeCamera(orbit);
@@ -932,8 +907,8 @@ void DrawPowder3D(const PowderScene& powder) {
 
 void HandlePowderMouseInput(PowderScene& powder, SimulationKind simulation, ViewMode view, int& brushRadius, const OrbitCamera& orbit) {
     if (simulation != SimulationKind::Powder) return;
-    const Vector2 mouse = AppMousePosition();
-    if (AppMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    const Vector2 mouse = PhysicsMousePosition();
+    if (PhysicsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         const int materialIndex = PowderPaletteHit(mouse);
         if (materialIndex >= 0) {
             powder.SetSelectedMaterial(kPowderPalette[materialIndex]);
@@ -953,7 +928,7 @@ void HandlePowderMouseInput(PowderScene& powder, SimulationKind simulation, View
         int y = 0;
         int z = 0;
         if (!PowderRayToVolumeCell(mouse, orbit, x, y, z)) return;
-        if (AppMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        if (PhysicsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
             if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) powder.EraseVolume(x, y, z, brushRadius);
             else powder.PaintVolume(x, y, z, brushRadius, powder.SelectedMaterial());
         }
@@ -963,8 +938,8 @@ void HandlePowderMouseInput(PowderScene& powder, SimulationKind simulation, View
     int x = 0;
     int y = 0;
     if (!PowderScreenToCell(mouse, x, y)) return;
-    if (AppMouseButtonDown(MOUSE_BUTTON_LEFT)) powder.Paint(x, y, brushRadius, powder.SelectedMaterial());
-    if (AppMouseButtonDown(MOUSE_BUTTON_RIGHT)) powder.Erase(x, y, brushRadius);
+    if (PhysicsMouseButtonDown(MOUSE_BUTTON_LEFT)) powder.Paint(x, y, brushRadius, powder.SelectedMaterial());
+    if (PhysicsMouseButtonDown(MOUSE_BUTTON_RIGHT)) powder.Erase(x, y, brushRadius);
 }
 
 Rectangle SimulationMenuCard(int index) {
@@ -996,8 +971,8 @@ void HandleSimulationMenuInput(SimulationKind& simulation, bool& menuOpen, int& 
         menuOpen = false;
         return;
     }
-    if (AppMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        const Vector2 mouse = AppMousePosition();
+    if (PhysicsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        const Vector2 mouse = PhysicsMousePosition();
         for (int i = 0; i < count; ++i) {
             if (CheckCollisionPointRec(mouse, SimulationMenuCard(i))) {
                 cursor = i;
@@ -1024,7 +999,8 @@ void DrawSimulationMenu(SimulationKind simulation, int cursor) {
         DrawRectangleRec(card, fill);
         DrawRectangleLinesEx(card, selected ? 3.0f : 1.0f, selected ? kSimulationMenu[i].accent : Color{76, 91, 117, 255});
         DrawRectangle(static_cast<int>(card.x), static_cast<int>(card.y), 7, static_cast<int>(card.height), kSimulationMenu[i].accent);
-        DrawText(TextFormat("%d", i + 1), static_cast<int>(card.x + 24), static_cast<int>(card.y + 18), 16, kSimulationMenu[i].accent);
+        const int shortcut = i == 9 ? 0 : i + 1;
+        DrawText(TextFormat("%d", shortcut), static_cast<int>(card.x + 24), static_cast<int>(card.y + 18), 16, kSimulationMenu[i].accent);
         DrawText(kSimulationMenu[i].title, static_cast<int>(card.x + 60), static_cast<int>(card.y + 16), 20, Color{232, 238, 248, 255});
         DrawText(kSimulationMenu[i].description, static_cast<int>(card.x + 60), static_cast<int>(card.y + 49), 14, Color{171, 183, 201, 255});
         if (active) DrawText("ACTIVE", static_cast<int>(card.x + card.width - 74), static_cast<int>(card.y + 18), 11, Color{126, 235, 167, 255});
@@ -1033,14 +1009,14 @@ void DrawSimulationMenu(SimulationKind simulation, int cursor) {
 }
 
 void HandleFlipMouseInput(FlipFluid& fluid, SimulationKind simulation, ViewMode view) {
-    if (simulation != SimulationKind::FlipFluid || view != ViewMode::TwoD || !AppMouseButtonPressed(MOUSE_BUTTON_LEFT)) return;
-    const FlipVec2 point = FlipScreenToWorld(AppMousePosition());
+    if (simulation != SimulationKind::FlipFluid || view != ViewMode::TwoD || !PhysicsMouseButtonPressed(MOUSE_BUTTON_LEFT)) return;
+    const FlipVec2 point = FlipScreenToWorld(PhysicsMousePosition());
     fluid.Poke({point.x, point.y, FlipFluid::kWorldDepth * 0.5}, {0.0, 5.0, 0.0});
 }
 
 void HandleSphMouseInput(SphFluid& fluid, SimulationKind simulation, ViewMode view) {
-    if (simulation != SimulationKind::SphFluid || view != ViewMode::TwoD || !AppMouseButtonPressed(MOUSE_BUTTON_LEFT)) return;
-    fluid.Poke(SphScreenToWorld(AppMousePosition()), {0.0, 5.0, 0.0});
+    if (simulation != SimulationKind::SphFluid || view != ViewMode::TwoD || !PhysicsMouseButtonPressed(MOUSE_BUTTON_LEFT)) return;
+    fluid.Poke(SphScreenToWorld(PhysicsMousePosition()), {0.0, 5.0, 0.0});
 }
 
 
@@ -1091,8 +1067,8 @@ int PianoKeyAtPoint(Vector2 point) {
 
 void HandlePianoInput(VibratingStringEngine& string, SimulationKind simulation, ViewMode view, int& selectedKey) {
     if (simulation != SimulationKind::VibratingString || view != ViewMode::Split) return;
-    if (AppMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        const int key = PianoKeyAtPoint(AppMousePosition());
+    if (PhysicsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        const int key = PianoKeyAtPoint(PhysicsMousePosition());
         if (key >= 0) { selectedKey = key; string.PlayFrequency(kPianoFrequencies[key]); }
     }
     constexpr KeyboardKey whiteKeys[8] = {KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B, KEY_N, KEY_M, KEY_COMMA};
@@ -1309,6 +1285,33 @@ void DrawHud(const SpringMass& spring, const BouncingBall& ball, const NewtonCoo
         else if (view != ViewMode::Split) DrawStringGraph(string);
     }
 }
+
+struct AppState {
+    SpringMass spring;
+    BouncingBall ball;
+    NewtonCooling cooling;
+    VibratingStringEngine string;
+    FlipFluid fluid;
+    SphFluid sph;
+    PowderScene powder;
+    BuoyancyScene buoyancy;
+    ClothElasticSolidsScene cloth;
+    BeamBendingScene beam;
+    BridgeBuilderScene bridge;
+    OrbitCamera camera;
+    bool paused = false;
+    bool muted = false;
+    bool menuOpen = true;
+    bool flipFrontView = false;
+    SimulationKind simulation = SimulationKind::SpringMass;
+    SimulationKind previousSimulation = SimulationKind::SpringMass;
+    ViewMode view = ViewMode::ThreeD;
+    int menuCursor = 0;
+    int powderBrushRadius = 4;
+    int selectedPianoKey = -1;
+    float accumulator = 0.0f;
+    bool shutdownRequested = false;
+};
 } // namespace
 
 void RunFrame(AppState& app) {
@@ -1320,36 +1323,52 @@ void RunFrame(AppState& app) {
         HandleSimulationMenuInput(app.simulation, app.menuOpen, app.menuCursor);
     } else {
         HandleInput(app.spring, app.ball, app.cooling, app.string, app.fluid, app.sph, app.powder, app.buoyancy,
-                     app.simulation, app.view, app.paused, app.muted, app.camera, app.flipFrontView);
+                    app.cloth, app.beam, app.bridge, app.simulation, app.view, app.paused, app.muted, app.camera, app.flipFrontView);
         app.powder.SetThreeDimensional(app.simulation == SimulationKind::Powder && app.view == ViewMode::ThreeD);
         app.buoyancy.SetThreeDimensional(app.simulation == SimulationKind::Buoyancy && app.view == ViewMode::ThreeD);
         HandlePianoInput(app.string, app.simulation, app.view, app.selectedPianoKey);
         HandleFlipMouseInput(app.fluid, app.simulation, app.view);
         HandleSphMouseInput(app.sph, app.simulation, app.view);
         HandlePowderMouseInput(app.powder, app.simulation, app.view, app.powderBrushRadius, app.camera);
-#ifdef __EMSCRIPTEN__
-        if (!app.audioReady && app.simulation == SimulationKind::VibratingString) app.string.Update(GetFrameTime());
-#endif
-        if (!app.paused && app.simulation != SimulationKind::VibratingString) {
+        if (IsKeyPressed(KEY_N) && app.paused) {
+            if (app.simulation == SimulationKind::ClothElasticSolids) app.cloth.Step(kFixedTimeStep);
+            else if (app.simulation == SimulationKind::BeamBending) app.beam.Step(kFixedTimeStep);
+            else if (app.simulation == SimulationKind::BridgeBuilder) app.bridge.Step(kFixedTimeStep);
+        }
+        if (!app.paused) {
             app.accumulator = std::min(app.accumulator + GetFrameTime(), 0.1f);
             while (app.accumulator >= kFixedTimeStep) {
                 if (app.simulation == SimulationKind::SpringMass) StepSpringMass(app.spring, kFixedTimeStep);
                 else if (app.simulation == SimulationKind::BouncingBall) StepBall(app.ball, kFixedTimeStep);
                 else if (app.simulation == SimulationKind::NewtonCooling) StepCooling(app.cooling, kFixedTimeStep);
+                else if (app.simulation == SimulationKind::VibratingString) app.string.Step(kFixedTimeStep);
                 else if (app.simulation == SimulationKind::FlipFluid) app.fluid.Step(kFixedTimeStep);
                 else if (app.simulation == SimulationKind::SphFluid) app.sph.Step(kFixedTimeStep);
                 else if (app.simulation == SimulationKind::Powder) app.powder.Step(kFixedTimeStep);
-                else app.buoyancy.Step(kFixedTimeStep);
+                else if (app.simulation == SimulationKind::Buoyancy) app.buoyancy.Step(kFixedTimeStep);
+                else if (app.simulation == SimulationKind::ClothElasticSolids) app.cloth.Step(kFixedTimeStep);
+                else if (app.simulation == SimulationKind::BeamBending) app.beam.Step(kFixedTimeStep);
+                else app.bridge.Step(kFixedTimeStep);
                 app.accumulator -= kFixedTimeStep;
             }
         }
     }
+    if (app.simulation != app.previousSimulation) {
+        app.accumulator = 0.0f;
+        if (app.simulation == SimulationKind::BridgeBuilder) app.view = ViewMode::TwoD;
+        app.previousSimulation = app.simulation;
+    }
+
     const StringSnapshot stringSnapshot = app.string.ReadSnapshot();
-    BeginDrawing(); ClearBackground(Color{10, 15, 27, 255});
+    BeginDrawing();
+    ClearBackground(Color{10, 15, 27, 255});
     if (app.view == ViewMode::Split && app.simulation == SimulationKind::VibratingString) DrawCombinedStringView(stringSnapshot, app.selectedPianoKey);
     else if (app.view == ViewMode::Spectrum && app.simulation == SimulationKind::VibratingString) DrawSpectrum(stringSnapshot);
     else if (app.view == ViewMode::ThreeD) {
-        const Camera3D cam = app.simulation == SimulationKind::FlipFluid ? MakeFlipCamera(app.camera, app.flipFrontView) : MakeCamera(app.camera);
+        const Camera3D cam = app.simulation == SimulationKind::FlipFluid ? MakeFlipCamera(app.camera, app.flipFrontView) :
+            (app.simulation == SimulationKind::ClothElasticSolids ? MakeCamera(app.camera, app.cloth.FocusTarget()) :
+            (app.simulation == SimulationKind::BeamBending ? MakeCamera(app.camera, app.beam.FocusTarget()) :
+            (app.simulation == SimulationKind::BridgeBuilder ? MakeCamera(app.camera, app.bridge.FocusTarget()) : MakeCamera(app.camera))));
         BeginMode3D(cam);
         if (app.simulation == SimulationKind::SpringMass) DrawSpring3D(app.spring);
         else if (app.simulation == SimulationKind::BouncingBall) DrawBall3D(app.ball);
@@ -1358,6 +1377,9 @@ void RunFrame(AppState& app) {
         else if (app.simulation == SimulationKind::SphFluid) DrawSph3D(app.sph);
         else if (app.simulation == SimulationKind::Powder) DrawPowder3D(app.powder);
         else if (app.simulation == SimulationKind::Buoyancy) DrawBuoyancy3D(app.buoyancy.ReadSnapshot());
+        else if (app.simulation == SimulationKind::ClothElasticSolids) app.cloth.Draw3D(cam);
+        else if (app.simulation == SimulationKind::BeamBending) app.beam.Draw3D(cam);
+        else if (app.simulation == SimulationKind::BridgeBuilder) app.bridge.Draw3D(cam);
         else DrawVibratingString3D(stringSnapshot);
         EndMode3D();
     } else if (app.simulation == SimulationKind::SpringMass) DrawSpring2D(app.spring);
@@ -1367,10 +1389,17 @@ void RunFrame(AppState& app) {
     else if (app.simulation == SimulationKind::SphFluid) DrawSph2D(app.sph);
     else if (app.simulation == SimulationKind::Powder) DrawPowder2D(app.powder);
     else if (app.simulation == SimulationKind::Buoyancy) DrawBuoyancy2D(app.buoyancy.ReadSnapshot());
+    else if (app.simulation == SimulationKind::ClothElasticSolids) app.cloth.Draw2D();
+    else if (app.simulation == SimulationKind::BeamBending) app.beam.Draw2D();
+    else if (app.simulation == SimulationKind::BridgeBuilder) app.bridge.Draw2D();
     else DrawVibratingString2D(stringSnapshot);
+
     const BuoyancySceneSnapshot buoyancySnapshot = app.buoyancy.ReadSnapshot();
-    DrawHud(app.spring, app.ball, app.cooling, stringSnapshot, app.fluid, app.sph, app.powder, buoyancySnapshot,
-            app.simulation, app.view, app.paused, app.muted);
+    if (app.simulation == SimulationKind::ClothElasticSolids) app.cloth.DrawHud(app.paused);
+    else if (app.simulation == SimulationKind::BeamBending) app.beam.DrawHud(app.paused);
+    else if (app.simulation == SimulationKind::BridgeBuilder) app.bridge.DrawHud(app.paused);
+    else DrawHud(app.spring, app.ball, app.cooling, stringSnapshot, app.fluid, app.sph, app.powder, buoyancySnapshot,
+                 app.simulation, app.view, app.paused, app.muted);
     if (app.simulation == SimulationKind::Powder && !app.menuOpen) DrawPowderPalette(app.powder, app.powderBrushRadius);
     if (app.menuOpen) DrawSimulationMenu(app.simulation, app.menuCursor);
     EndDrawing();
@@ -1378,14 +1407,13 @@ void RunFrame(AppState& app) {
 }
 
 #ifdef __EMSCRIPTEN__
-AppState* gWebApp = nullptr;
-
-void RunWebFrame() {
-    if (gWebApp == nullptr || gWebApp->shutdownRequested) {
+AppState* gPhysicsApp = nullptr;
+void RunPhysicsWebFrame() {
+    if (gPhysicsApp == nullptr || gPhysicsApp->shutdownRequested) {
         emscripten_cancel_main_loop();
         return;
     }
-    RunFrame(*gWebApp);
+    RunFrame(*gPhysicsApp);
 }
 #endif
 
@@ -1393,22 +1421,17 @@ int main() {
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(1280, 800, "Physics Sandbox");
 #ifdef __EMSCRIPTEN__
-    InstallWebMouseBridge();
+    InstallPhysicsMouseBridge();
     SetTargetFPS(0);
 #else
     SetTargetFPS(60);
 #endif
     static AppState app;
 #ifdef __EMSCRIPTEN__
-    app.audioReady = false;
+    gPhysicsApp = &app;
+    emscripten_set_main_loop(RunPhysicsWebFrame, 0, 1);
 #else
-    const bool audioReady = app.string.StartAudio();
-    app.audioReady = audioReady;
-#endif
-#ifdef __EMSCRIPTEN__
-    gWebApp = &app;
-    emscripten_set_main_loop(RunWebFrame, 0, 1);
-#else
+    app.string.StartAudio();
     while (!app.shutdownRequested) RunFrame(app);
     app.string.StopAudio();
     CloseWindow();

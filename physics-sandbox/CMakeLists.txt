@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(SpringMassSandbox LANGUAGES CXX)
+project(ClothElasticPlayground LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -12,8 +12,7 @@ endif()
 include(FetchContent)
 
 if (EMSCRIPTEN)
-    # Raylib 5.5 needs the platform selected explicitly when it is brought in
-    # through FetchContent; otherwise its GLFW dependency can select X11.
+    # Raylib must be configured for Web before its GLFW dependency is added.
     set(PLATFORM Web CACHE STRING "raylib target platform" FORCE)
 endif()
 
@@ -38,17 +37,19 @@ endif()
 
 add_executable(spring_mass_sandbox
     src/main.cpp
-    src/vibrating_string.cpp
+    src/vibrating_string.h
+    src/sph_fluid.h
+    src/web_mouse.h
     src/flip_fluid.cpp
-    src/sph_fluid.cpp
     src/powder_scene.cpp
     src/buoyancy_scene.cpp
+    src/cloth_elastic_solids_scene.cpp
+    src/beam_bending_scene.cpp
+    src/bridge_builder_scene.cpp
 )
 target_link_libraries(spring_mass_sandbox PRIVATE raylib)
 
 if (EMSCRIPTEN)
-    # Emscripten emits the HTML loader alongside the JavaScript/WebAssembly
-    # payloads so the target can be published as a static GitHub Pages site.
     set_target_properties(spring_mass_sandbox PROPERTIES SUFFIX ".html")
     target_link_options(spring_mass_sandbox PRIVATE
         "-sUSE_GLFW=3"

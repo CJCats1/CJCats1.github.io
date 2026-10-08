@@ -2,177 +2,250 @@
 
 #include "raylib.h"
 
+#include <algorithm>
 #include <array>
-#include <atomic>
+#include <cmath>
 #include <cstddef>
-#include <cstdint>
 
 struct StringSnapshot {
     static constexpr std::size_t kDisplayNodes = 65;
-    static constexpr std::size_t kHistoryNodes = 90;
     static constexpr std::size_t kSpectrumBins = 64;
+    static constexpr std::size_t kHistoryNodes = 90;
 
-    std::array<float, kDisplayNodes> displacement{};
-    std::array<float, kHistoryNodes> temperatureHistory{};
-    std::array<float, kSpectrumBins> spectrumDb{};
+    float length = 3.0f;
     float temperature = 20.0f;
     float ambientTemperature = 20.0f;
     float heatingPower = 0.0f;
     float coolingPower = 0.0f;
-    float mechanicalEnergy = 0.0f;
-    float thermalExcessEnergy = 0.0f;
     float generatedHeat = 0.0f;
-    float heatToEnvironment = 0.0f;
+    float mechanicalEnergy = 0.0f;
     float numericalResidual = 0.0f;
-    float tension = 80.0f;
-    float dampingRate = 0.8f;
-    float heatingFraction = 0.85f;
-    float heatLossCoefficient = 0.035f;
-    float pickupPosition = 0.5f;
-    float pluckAmplitude = 0.008f;
-    float length = 0.65f;
-    float waveSpeed = 0.0f;
-    float fundamentalFrequency = 0.0f;
-    float simulatedTime = 0.0f;
-    float displacementScale = 5.0f;
-    float spectrumPeakFrequency = 0.0f;
+    float fundamentalFrequency = 110.0f;
+    float waveSpeed = 660.0f;
+    float spectrumPeakFrequency = 110.0f;
     float spectrumPeakDb = -80.0f;
-    int historyCount = 0;
-    uint32_t clippingCount = 0;
-    bool audioReady = false;
-    bool muted = false;
-    bool paused = false;
+    float pluckAmplitude = 0.045f;
+    float displacementScale = 5.0f;
+    int historyCount = 90;
+    std::array<float, kDisplayNodes> displacement{};
+    std::array<float, kSpectrumBins> spectrumDb{};
+    std::array<float, kHistoryNodes> temperatureHistory{};
 };
 
 class VibratingStringEngine {
 public:
-    VibratingStringEngine();
-    ~VibratingStringEngine();
+    VibratingStringEngine() { RequestReset(); }
+    ~VibratingStringEngine() { StopAudio(); }
 
-    bool StartAudio();
-    void StopAudio();
-    void Update(double dt);
+    VibratingStringEngine(const VibratingStringEngine&) = delete;
+    VibratingStringEngine& operator=(const VibratingStringEngine&) = delete;
 
-    void SetActive(bool active);
-    void SetPaused(bool paused);
-    void SetMuted(bool muted);
-    void RequestReset();
-    void RequestPluck();
-    void PlayFrequency(float frequency);
-    void RequestHotStart();
+    bool StartAudio() {
+        if (audioReady_) return true;
+        if (!IsAudioDeviceReady()) InitAudioDevice();
+        if (!IsAudioDeviceReady()) return false;
+        SetAudioStreamBufferSizeDefault(kAudioBufferSize);
+        audioStream_ = LoadAudioStream(kAudioSampleRate, 32, 1);
+        if (!IsAudioStreamValid(audioStream_)) { CloseAudioDevice(); return false; }
+        PlayAudioStream(audioStream_);
+        audioReady_ = true;
+        return true;
+    }
 
-    void AdjustTension(float delta);
-    void AdjustDamping(float delta);
-    void AdjustHeatingFraction(float delta);
-    void AdjustHeatLoss(float delta);
-    void AdjustPluckAmplitude(float delta);
-    void AdjustPickupPosition(float delta);
+    void StopAudio() {
+        if (!audioReady_) return;
+        StopAudioStream(audioStream_);
+        UnloadAudioStream(audioStream_);
+        CloseAudioDevice();
+        audioReady_ = false;
+    }
 
-    StringSnapshot ReadSnapshot() const;
+    void SetActive(bool active) {
+        active_ = active;
+        if (!audioReady_) return;
+        if (active_) ResumeAudioStream(audioStream_);
+        else PauseAudioStream(audioStream_);
+    }
+    void SetPaused(bool paused) { paused_ = paused; }
+    void SetMuted(bool muted) { muted_ = muted; }
+
+    void RequestPluck() { pluckPending_ = true; }
+    void RequestHotStart() { snapshot_.temperature = 85.0f; }
+
+    void RequestReset() {
+        snapshot_ = {};
+        snapshot_.length = 3.0f;
+        snapshot_.temperature = 20.0f;
+        snapshot_.ambientTemperature = 20.0f;
+        snapshot_.fundamentalFrequency = 110.0f;
+        snapshot_.waveSpeed = 660.0f;
+        snapshot_.spectrumPeakFrequency = 110.0f;
+        snapshot_.spectrumPeakDb = -80.0f;
+        snapshot_.pluckAmplitude = 0.045f;
+        snapshot_.displacementScale = 5.0f;
+        snapshot_.historyCount = static_cast<int>(StringSnapshot::kHistoryNodes);
+        for (std::size_t i = 0; i < snapshot_.temperatureHistory.size(); ++i) snapshot_.temperatureHistory[i] = snapshot_.temperature;
+        for (std::size_t i = 0; i < snapshot_.spectrumDb.size(); ++i) snapshot_.spectrumDb[i] = -80.0f;
+
+        damping_ = 0.25f;
+        heatingFraction_ = 0.25f;
+        heatLoss_ = 0.05f;
+        pickupPosition_ = 0.5f;
+        generatedHeat_ = 0.0f;
+        audioAmplitude_ = 0.0f;
+        audioPhase_ = 0.0;
+        previousMechanicalEnergy_ = 0.0f;
+        pluckPending_ = false;
+        std::fill(displacement_.begin(), displacement_.end(), 0.0f);
+        std::fill(velocity_.begin(), velocity_.end(), 0.0f);
+        std::fill(audioHistory_.begin(), audioHistory_.end(), 0.0f);
+        audioHistoryWrite_ = 0;
+        UpdateSnapshot();
+    }
+
+    void PlayFrequency(float frequency) {
+        snapshot_.fundamentalFrequency = std::clamp(frequency, 20.0f, 1000.0f);
+        snapshot_.waveSpeed = snapshot_.fundamentalFrequency * 2.0f * snapshot_.length;
+        snapshot_.spectrumPeakFrequency = snapshot_.fundamentalFrequency;
+    }
+    void AdjustTension(float delta) { PlayFrequency(snapshot_.fundamentalFrequency + delta * 2.0f); }
+    void AdjustDamping(float delta) { damping_ = std::clamp(damping_ + delta, 0.0f, 3.0f); }
+    void AdjustPluckAmplitude(float delta) { snapshot_.pluckAmplitude = std::clamp(snapshot_.pluckAmplitude + delta, 0.001f, 0.25f); }
+    void AdjustHeatingFraction(float delta) { heatingFraction_ = std::clamp(heatingFraction_ + delta, 0.0f, 1.0f); }
+    void AdjustHeatLoss(float delta) { heatLoss_ = std::clamp(heatLoss_ + delta, 0.0f, 2.0f); }
+    void AdjustPickupPosition(float delta) { pickupPosition_ = std::clamp(pickupPosition_ + delta, 0.05f, 0.95f); }
+
+    void Step(float dt) {
+        if (paused_) return;
+        const float clampedDt = std::clamp(dt, 0.0f, 0.05f);
+        if (clampedDt <= 0.0f) return;
+        if (pluckPending_) { ApplyPluck(); pluckPending_ = false; }
+
+        const float dx = snapshot_.length / static_cast<float>(kSegments);
+        const float c = snapshot_.waveSpeed;
+        const int substeps = std::clamp(static_cast<int>(std::ceil(clampedDt * c / (0.35f * dx))), 1, 512);
+        const float h = clampedDt / static_cast<float>(substeps);
+        double dissipatedPower = 0.0;
+        for (int substep = 0; substep < substeps; ++substep) {
+            for (std::size_t i = 1; i < kNodes - 1; ++i) {
+                const float laplacian = (displacement_[i - 1] - 2.0f * displacement_[i] + displacement_[i + 1]) / (dx * dx);
+                velocity_[i] += (c * c * laplacian - damping_ * velocity_[i]) * h;
+                displacement_[i] += velocity_[i] * h;
+            }
+            displacement_.front() = 0.0f;
+            displacement_.back() = 0.0f;
+            for (std::size_t i = 1; i < kNodes - 1; ++i) dissipatedPower += damping_ * velocity_[i] * velocity_[i] * h;
+        }
+
+        const float pickup = SampleDisplacement(pickupPosition_);
+        const float heat = static_cast<float>(heatingFraction_ * dissipatedPower);
+        snapshot_.heatingPower = heat / clampedDt;
+        snapshot_.coolingPower = heatLoss_ * (snapshot_.temperature - snapshot_.ambientTemperature);
+        snapshot_.temperature += (heat - snapshot_.coolingPower * clampedDt) / kThermalCapacity;
+        generatedHeat_ += heat;
+        snapshot_.generatedHeat = generatedHeat_;
+        snapshot_.mechanicalEnergy = ComputeMechanicalEnergy(dx);
+        snapshot_.numericalResidual = snapshot_.mechanicalEnergy - previousMechanicalEnergy_ + static_cast<float>(dissipatedPower);
+        previousMechanicalEnergy_ = snapshot_.mechanicalEnergy;
+        PushAudioHistory(pickup);
+        UpdateSnapshot();
+        UpdateAudio();
+    }
+
+    StringSnapshot ReadSnapshot() const { return snapshot_; }
 
 private:
     static constexpr std::size_t kSegments = 128;
     static constexpr std::size_t kNodes = kSegments + 1;
-    static constexpr unsigned int kSampleRate = 48000;
-    static constexpr int kSubsteps = 4;
-    static constexpr uint32_t kCommandReset = 1u << 0;
-    static constexpr uint32_t kCommandPluck = 1u << 1;
-    static constexpr uint32_t kCommandHotStart = 1u << 2;
+    static constexpr int kAudioSampleRate = 48000;
+    static constexpr int kAudioBufferSize = 512;
+    static constexpr float kThermalCapacity = 1.2f;
 
-    static void AudioCallback(void* bufferData, unsigned int frames);
-    void ProcessAudio(float* output, unsigned int frames);
-    void ApplyRequests();
-    void ResetModel();
-    void PluckModel();
-    void StepSubstep(double dt);
-    void PublishSnapshot();
-    void RecordTemperatureHistory();
-    void ComputeSpectrum();
-    double ComputeMechanicalEnergy() const;
-    double PickupDisplacement() const;
-    void StoreAtomic(std::atomic<float>& target, float value);
+    void ApplyPluck() {
+        for (std::size_t i = 0; i < kNodes; ++i) {
+            const float x = static_cast<float>(i) / static_cast<float>(kSegments);
+            displacement_[i] = snapshot_.pluckAmplitude * (x < 0.5f ? 2.0f * x : 2.0f * (1.0f - x));
+            velocity_[i] = 0.0f;
+        }
+        audioAmplitude_ = snapshot_.pluckAmplitude;
+    }
 
-    AudioStream audioStream_{};
-    bool streamLoaded_ = false;
-    bool audioDeviceOwned_ = false;
-    VibratingStringEngine* callbackOwner_ = nullptr;
+    float SampleDisplacement(float position) const {
+        const float coordinate = std::clamp(position, 0.0f, 1.0f) * static_cast<float>(kSegments);
+        const std::size_t left = std::min(kSegments - 1, static_cast<std::size_t>(coordinate));
+        const float fraction = coordinate - static_cast<float>(left);
+        return displacement_[left] * (1.0f - fraction) + displacement_[left + 1] * fraction;
+    }
 
-    std::array<double, kNodes> displacement_{};
-    std::array<double, kNodes> velocity_{};
-    std::array<double, kNodes> acceleration_{};
-    std::array<float, StringSnapshot::kHistoryNodes> temperatureHistory_{};
+    float ComputeMechanicalEnergy(float dx) const {
+        const float massPerNode = 0.001f * dx;
+        double energy = 0.0;
+        for (std::size_t i = 1; i < kNodes - 1; ++i) {
+            const float slope = (displacement_[i + 1] - displacement_[i]) / dx;
+            energy += 0.5 * massPerNode * (velocity_[i] * velocity_[i] + snapshot_.waveSpeed * snapshot_.waveSpeed * slope * slope);
+        }
+        return static_cast<float>(energy);
+    }
 
-    double length_ = 0.65;
-    double radius_ = 0.00045;
-    double density_ = 7800.0;
-    double specificHeat_ = 385.0;
-    double massPerLength_ = 0.0;
-    double dx_ = 0.0;
-    double waveSpeed_ = 0.0;
-    double time_ = 0.0;
-    double temperature_ = 20.0;
-    double generatedHeat_ = 0.0;
-    double heatToEnvironment_ = 0.0;
-    double initialMechanicalEnergy_ = 0.0;
-    double historyTimer_ = 0.0;
-    double snapshotTimer_ = 0.0;
-    double spectrumTimer_ = 0.0;
-    double previousAudioInput_ = 0.0;
-    double previousAudioOutput_ = 0.0;
-    double previousAudioLowpass_ = 0.0;
-    static constexpr std::size_t kFftSize = 512;
-    std::array<float, kFftSize> audioHistory_{};
-    std::size_t audioHistoryWrite_ = 0;
-    std::array<float, kFftSize> fftReal_{};
-    std::array<float, kFftSize> fftImag_{};
+    void PushAudioHistory(float sample) {
+        audioHistory_[audioHistoryWrite_] = sample;
+        audioHistoryWrite_ = (audioHistoryWrite_ + 1) % audioHistory_.size();
+    }
 
-    std::atomic<float> requestedTension_{80.0f};
-    std::atomic<float> requestedDamping_{0.8f};
-    std::atomic<float> requestedHeatingFraction_{0.85f};
-    std::atomic<float> requestedHeatLoss_{0.035f};
-    std::atomic<float> requestedPickupPosition_{0.5f};
-    std::atomic<float> requestedPluckAmplitude_{0.008f};
-    std::atomic<float> requestedAmbientTemperature_{20.0f};
-    std::atomic<uint32_t> pendingCommands_{kCommandReset | kCommandPluck};
-    std::atomic<bool> active_{false};
-    std::atomic<bool> paused_{false};
-    std::atomic<bool> muted_{false};
+    void UpdateSnapshot() {
+        for (std::size_t i = 0; i < snapshot_.kDisplayNodes; ++i) snapshot_.displacement[i] = displacement_[std::min(kSegments, i * 2)];
+        for (std::size_t i = snapshot_.temperatureHistory.size() - 1; i > 0; --i) snapshot_.temperatureHistory[i] = snapshot_.temperatureHistory[i - 1];
+        snapshot_.temperatureHistory[0] = snapshot_.temperature;
 
-    float tension_ = 80.0f;
-    float dampingRate_ = 0.8f;
-    float heatingFraction_ = 0.85f;
-    float heatLossCoefficient_ = 0.035f;
+        float strongest = -80.0f;
+        std::size_t strongestBin = 1;
+        for (std::size_t bin = 1; bin < snapshot_.kSpectrumBins; ++bin) {
+            double real = 0.0;
+            double imag = 0.0;
+            for (std::size_t n = 0; n < audioHistory_.size(); ++n) {
+                const double angle = 2.0 * 3.14159265358979323846 * static_cast<double>(bin * n) / static_cast<double>(audioHistory_.size());
+                const float value = audioHistory_[(audioHistoryWrite_ + n) % audioHistory_.size()];
+                real += value * std::cos(angle);
+                imag -= value * std::sin(angle);
+            }
+            const float db = std::max(-80.0f, static_cast<float>(20.0 * std::log10(std::max(1.0e-6, std::sqrt(real * real + imag * imag) / static_cast<double>(audioHistory_.size())))));
+            snapshot_.spectrumDb[bin] = db;
+            if (db > strongest) { strongest = db; strongestBin = bin; }
+        }
+        snapshot_.spectrumDb[0] = -80.0f;
+        snapshot_.spectrumPeakDb = strongest;
+        snapshot_.spectrumPeakFrequency = strongest > -79.9f ? static_cast<float>(strongestBin) * static_cast<float>(kAudioSampleRate) / static_cast<float>(audioHistory_.size()) : snapshot_.fundamentalFrequency;
+    }
+
+    void UpdateAudio() {
+        if (!audioReady_ || !active_ || !IsAudioStreamProcessed(audioStream_)) return;
+        std::array<float, kAudioBufferSize> samples{};
+        for (float& sample : samples) {
+            sample = muted_ ? 0.0f : audioAmplitude_ * 8.0f * std::sin(static_cast<float>(audioPhase_));
+            audioPhase_ += 2.0 * 3.14159265358979323846 * snapshot_.fundamentalFrequency / static_cast<double>(kAudioSampleRate);
+            if (audioPhase_ > 2.0 * 3.14159265358979323846) audioPhase_ -= 2.0 * 3.14159265358979323846;
+            audioAmplitude_ *= 0.9996f;
+        }
+        UpdateAudioStream(audioStream_, samples.data(), kAudioBufferSize);
+    }
+
+    StringSnapshot snapshot_{};
+    std::array<float, kNodes> displacement_{};
+    std::array<float, kNodes> velocity_{};
+    std::array<float, 512> audioHistory_{};
+    float damping_ = 0.25f;
+    float heatingFraction_ = 0.25f;
+    float heatLoss_ = 0.05f;
     float pickupPosition_ = 0.5f;
-    float pluckAmplitude_ = 0.008f;
-    float ambientTemperature_ = 20.0f;
-    uint32_t clippingCount_ = 0;
-
-    std::array<std::atomic<float>, StringSnapshot::kDisplayNodes> snapshotDisplacement_{};
-    std::array<std::atomic<float>, StringSnapshot::kHistoryNodes> snapshotTemperatureHistory_{};
-    std::array<std::atomic<float>, StringSnapshot::kSpectrumBins> snapshotSpectrumDb_{};
-    std::atomic<float> snapshotSpectrumPeakFrequency_{0.0f};
-    std::atomic<float> snapshotSpectrumPeakDb_{-80.0f};
-    std::atomic<float> snapshotTemperature_{20.0f};
-    std::atomic<float> snapshotHeatingPower_{0.0f};
-    std::atomic<float> snapshotCoolingPower_{0.0f};
-    std::atomic<float> snapshotMechanicalEnergy_{0.0f};
-    std::atomic<float> snapshotThermalExcessEnergy_{0.0f};
-    std::atomic<float> snapshotGeneratedHeat_{0.0f};
-    std::atomic<float> snapshotHeatToEnvironment_{0.0f};
-    std::atomic<float> snapshotResidual_{0.0f};
-    std::atomic<float> snapshotTension_{80.0f};
-    std::atomic<float> snapshotDamping_{0.8f};
-    std::atomic<float> snapshotHeatingFraction_{0.85f};
-    std::atomic<float> snapshotHeatLoss_{0.035f};
-    std::atomic<float> snapshotPickup_{0.5f};
-    std::atomic<float> snapshotPluckAmplitude_{0.008f};
-    std::atomic<float> snapshotWaveSpeed_{0.0f};
-    std::atomic<float> snapshotFundamental_{0.0f};
-    std::atomic<float> snapshotSimulatedTime_{0.0f};
-    std::atomic<float> snapshotAmbient_{20.0f};
-    std::atomic<int> snapshotHistoryCount_{0};
-    std::atomic<uint32_t> snapshotClippingCount_{0};
-    std::atomic<bool> snapshotAudioReady_{false};
-    std::atomic<bool> snapshotMuted_{false};
-    std::atomic<bool> snapshotPaused_{false};
+    float generatedHeat_ = 0.0f;
+    float audioAmplitude_ = 0.0f;
+    double audioPhase_ = 0.0;
+    float previousMechanicalEnergy_ = 0.0f;
+    std::size_t audioHistoryWrite_ = 0;
+    bool pluckPending_ = false;
+    bool active_ = false;
+    bool paused_ = false;
+    bool muted_ = false;
+    bool audioReady_ = false;
+    AudioStream audioStream_{};
 };
